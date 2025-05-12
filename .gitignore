@@ -1,0 +1,14 @@
+# vscode
+.vscode/**
+
+# build
+**/build/**
+**/install/**
+
+# recording
+recording/**
+
+# g2o library
+**/g2o/bin/**
+**/g2o/build/**
+**/g2o/lib/**
