@@ -57,16 +57,17 @@ private:
      * @param msg PointCloud2 message from radar
      */
     void radarCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+
+    /**
+     * @brief Callback for ground truth pose data
+     * @param msg PoseStamped message from ground truth
+     */
+    void poseCallbackGroundTruth(const geometry_msgs::PoseStamped::ConstPtr& msg);
     
     /**
      * @brief Publish all results from the radar_4_vox_map processing
      */
     void publishResults();
-    
-    /**
-     * @brief Generate and publish local map from radar_4_vox_map
-     */
-    void publishLocalMap();
     
     /**
      * @brief Generate and publish voxel visualization
@@ -123,8 +124,10 @@ private:
 private:
     // ROS related members
     ros::NodeHandle nh_;
+
     ros::Subscriber radar_sub_;
-    
+    ros::Subscriber ground_truth_pose_sub_;
+
     ros::Publisher local_map_pub_;
     ros::Publisher radar_points_pub_;
     ros::Publisher estimated_pose_array_pub_;
@@ -134,6 +137,7 @@ private:
     ros::Publisher graph_vertex_pose_array_pub_;
     ros::Publisher estimated_pose_pub_;
     ros::Publisher tf_pub_;
+    ros::Publisher ground_truth_pose_pub_;
     
     // ROS parameters
     std::string radar_topic_;
@@ -145,7 +149,8 @@ private:
     bool publish_tf_;
     bool publish_voxel_map_;
     bool publish_graph_;
-    
+    bool publish_ground_truth_pose_;
+    std::string ground_truth_pose_topic_;
     // Field mapping related variables
     CRadarFieldMapping field_mapping_;
     
@@ -175,6 +180,7 @@ private:
     visualization_msgs::MarkerArray graph_marker_array_;
     geometry_msgs::PoseArray graph_node_pose_array_msg_;
     geometry_msgs::PoseStamped est_pose_msg_;
+    geometry_msgs::PoseArray ground_truth_pose_array_msg_;
     tf2_msgs::TFMessage tf_message_msg_;
     
     // Tracking visualization state

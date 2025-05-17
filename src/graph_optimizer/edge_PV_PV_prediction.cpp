@@ -37,7 +37,19 @@ void EdgePVPVPrediction::computeError() {
     g2o::VectorN<PV_STATE_SIZE> v1_mid_prior = Prediction(v1_estimate, dt*0.5);
     g2o::VectorN<PV_STATE_SIZE> v2_mid_prior = Prediction(v2_estimate, -dt*0.5);
 
+    double qw_1 = std::sqrt(1 - v1_mid_prior[IDX_QX] * v1_mid_prior[IDX_QX] - v1_mid_prior[IDX_QY] * v1_mid_prior[IDX_QY] - v1_mid_prior[IDX_QZ] * v1_mid_prior[IDX_QZ]);
+    double qw_2 = std::sqrt(1 - v2_mid_prior[IDX_QX] * v2_mid_prior[IDX_QX] - v2_mid_prior[IDX_QY] * v2_mid_prior[IDX_QY] - v2_mid_prior[IDX_QZ] * v2_mid_prior[IDX_QZ]);
+
+    Eigen::Quaterniond q1(qw_1, v1_mid_prior[IDX_QX], v1_mid_prior[IDX_QY], v1_mid_prior[IDX_QZ]);
+    Eigen::Quaterniond q2(qw_2, v2_mid_prior[IDX_QX], v2_mid_prior[IDX_QY], v2_mid_prior[IDX_QZ]);
+
+    Eigen::Quaterniond q_error = q1.inverse() * q2;
+    Eigen::Vector3d   q_error_xyz = {q_error.x(), q_error.y(), q_error.z()};
+
     _error       = v2_mid_prior - v1_mid_prior;
+    _error[IDX_QX] = q_error_xyz[0];
+    _error[IDX_QY] = q_error_xyz[1];
+    _error[IDX_QZ] = q_error_xyz[2];
     // _measurement = Prediction(v1_estimate, dt);
     // _error       = v2_estimate - _measurement;
     if ( _information.isApprox(g2o::MatrixN<PV_STATE_SIZE>::Identity()) ) {

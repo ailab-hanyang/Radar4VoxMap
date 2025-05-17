@@ -21,6 +21,7 @@
 #include "graph_optimizer/edge_PV_PV_prediction.hpp"
 #include "graph_optimizer/edge_PV_doppler.hpp"
 #include "graph_optimizer/vertex_PV_radar.hpp"
+#include "graph_optimizer/edge_PV_GravityAlign.hpp"
 
 #include "voxeled_rcs_mapper/voxeled_rcs_mapper.hpp"
 
@@ -41,6 +42,7 @@ typedef VertexPVRadar      VertexType;
 typedef EdgePVPVPrediction EdgeBinaryPredictionType;
 typedef EdgePVDICP         EdgeUnaryICPType;
 typedef EdgePVDoppler      EdgeUnaryDopplerType;
+typedef EdgePVGravityAlign EdgeUnaryGravityAlignType;
 
 class GraphOptimizer {
 public:

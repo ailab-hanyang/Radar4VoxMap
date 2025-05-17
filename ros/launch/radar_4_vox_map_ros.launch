@@ -11,6 +11,8 @@
     <arg name="publish_voxel_map" default="true" />
     <arg name="publish_graph" default="true" />
     <arg name="visualize" default="false" />
+    <arg name="publish_ground_truth_pose" default="true" />
+    <arg name="ground_truth_pose_topic" default="/pose/local" />
     
     <!-- Launch radar_4_vox_map_ros node -->
     <node pkg="radar_4_vox_map" type="radar_4_vox_map_ros" name="radar_4_vox_map" output="screen">
@@ -22,6 +24,8 @@
         <param name="publish_tf" value="$(arg publish_tf)" />
         <param name="publish_voxel_map" value="$(arg publish_voxel_map)" />
         <param name="publish_graph" value="$(arg publish_graph)" />
+        <param name="publish_ground_truth_pose" value="$(arg publish_ground_truth_pose)" />
+        <param name="ground_truth_pose_topic" value="$(arg ground_truth_pose_topic)" />
     </node>
     
     <!-- Launch RViz for visualization (optional) -->

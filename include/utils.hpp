@@ -121,6 +121,9 @@ struct VoxelRcsMapperConfig{
     int local_map_property;
     int voxel_visualize_min_point;
     bool voxel_visualize_only_static;
+
+    bool virtual_gravity_align;
+    double virtual_gravity_align_information;
 };
 
 

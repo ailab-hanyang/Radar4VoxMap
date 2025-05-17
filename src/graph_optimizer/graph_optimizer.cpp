@@ -177,6 +177,16 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
         new_vertex->setFixed(true);
     }
 
+    // Add Gravity Align Edge for visualization. so loosly fixed
+    if ( m_config.virtual_gravity_align == true ) {
+        EdgeUnaryGravityAlignType* edge_gravity_align = new EdgeUnaryGravityAlignType();
+        edge_gravity_align->setId(GetNewEdgeIndex());
+        edge_gravity_align->setVertex(0, new_vertex);
+        edge_gravity_align->setParameterId(0, 0);
+        edge_gravity_align->setInformation(m_config.virtual_gravity_align_information);
+        m_p_g2o_optimizer->addEdge(edge_gravity_align);
+    }
+
     return;
 }
 

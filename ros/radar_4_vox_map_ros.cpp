@@ -38,11 +38,20 @@ bool Radar4VoxMapROS::initialize() {
     nh_.param<bool>("publish_tf", publish_tf_, true);
     nh_.param<bool>("publish_voxel_map", publish_voxel_map_, true);
     nh_.param<bool>("publish_graph", publish_graph_, true);
+    nh_.param<bool>("publish_ground_truth_pose", publish_ground_truth_pose_, false);
+    nh_.param<std::string>("ground_truth_pose_topic", ground_truth_pose_topic_, "/pose/local");
     
     ROS_INFO("Radar4VoxMapROS initializing with parameters:");
     ROS_INFO_STREAM("  radar_topic: " << radar_topic_);
     ROS_INFO_STREAM("  radar_dataset_type: " << radar_dataset_type_);
     ROS_INFO_STREAM("  algorithm_ini_path: " << algorithm_ini_path_);
+    ROS_INFO_STREAM("  world_frame_id: " << world_frame_id_);
+    ROS_INFO_STREAM("  base_link_frame_id: " << base_link_frame_id_);
+    ROS_INFO_STREAM("  publish_tf: " << publish_tf_);
+    ROS_INFO_STREAM("  publish_voxel_map: " << publish_voxel_map_);
+    ROS_INFO_STREAM("  publish_graph: " << publish_graph_);
+    ROS_INFO_STREAM("  publish_ground_truth_pose: " << publish_ground_truth_pose_);
+    ROS_INFO_STREAM("  ground_truth_pose_topic: " << ground_truth_pose_topic_);
     
     // Setup ROS interface
     setupROSInterface();
@@ -131,6 +140,10 @@ bool Radar4VoxMapROS::initialize() {
         }
         
         ini_handler.ParseConfig("output", "voxel_visualize_only_static", vox_map_config_.voxel_visualize_only_static);
+
+        // Load virtual gravity align settings
+        ini_handler.ParseConfig("virtual_gravity_align", "virtual_gravity_align", vox_map_config_.virtual_gravity_align);
+        ini_handler.ParseConfig("virtual_gravity_align", "virtual_gravity_align_information", vox_map_config_.virtual_gravity_align_information);
     } else {
         ROS_ERROR("Failed to load INI file: %s", full_ini_path.c_str());
         return false;
@@ -158,10 +171,12 @@ void Radar4VoxMapROS::setupROSInterface() {
     graph_marker_array_pub_      = nh_.advertise<visualization_msgs::MarkerArray>("/radar_4_vox_map/graph_marker_array", 5);
     graph_vertex_pose_array_pub_ = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/graph_vertex_pose_array", 5);
     estimated_pose_pub_          = nh_.advertise<geometry_msgs::PoseStamped>("/radar_4_vox_map/estimated_pose", 5);
+    ground_truth_pose_pub_        = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/ground_truth_pose_array", 5);
     tf_pub_                      = nh_.advertise<tf2_msgs::TFMessage>("/tf", 10);
-    
+
     // Setup subscriber with queue size 10
     radar_sub_ = nh_.subscribe(radar_topic_, 10, &Radar4VoxMapROS::radarCallback, this);
+    ground_truth_pose_sub_ = nh_.subscribe(ground_truth_pose_topic_, 10, &Radar4VoxMapROS::poseCallbackGroundTruth, this);
     
     ROS_INFO("ROS interface setup completed");
 }
@@ -198,6 +213,59 @@ void Radar4VoxMapROS::radarCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
     
     // Publish results
     publishResults();
+}
+
+void Radar4VoxMapROS::poseCallbackGroundTruth(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+    // Get current pose
+    Eigen::Vector3d translation = Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
+    Eigen::Quaterniond q(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z);
+    Eigen::Matrix3d rotation = q.toRotationMatrix();
+
+    Eigen::Affine3d pose = Eigen::Affine3d();
+    pose.translation() = translation;
+    pose.linear() = rotation;
+
+    // Get relative pose with camera to radar calibration
+    static bool is_first_msg = true;
+    static Eigen::Affine3d first_pose;
+    static Eigen::Affine3d first_pose_inv;
+    static Eigen::Affine3d estimated_pose_to_radar_calibration; 
+
+    if (is_first_msg) {
+        is_first_msg = false;
+
+        // Camera to Radar - Tr_velo_to_cam: -0.013857 -0.9997468 0.01772762 0.05283124 0.10934269 -0.01913807 -0.99381983 0.98100483 0.99390751 -0.01183297 0.1095802 1.44445002
+        Eigen::Vector3d translation_radar = Eigen::Vector3d(3.44445002, 0.05283124, -0.98100483);
+        // Eigen::Vector3d translation_radar = Eigen::Vector3d(1.44445002, 0.05283124, -0.98100483);
+        Eigen::Matrix3d rotation_radar = Eigen::Matrix3d::Identity();
+        rotation_radar << -0.013857, -0.9997468, 0.01772762,
+                          0.10934269, -0.01913807, -0.99381983,
+                          0.99390751, -0.01183297, 0.1095802;
+        estimated_pose_to_radar_calibration = Eigen::Affine3d();
+        estimated_pose_to_radar_calibration.translation() = translation_radar;
+        estimated_pose_to_radar_calibration.linear() = rotation_radar;
+
+        first_pose = pose * estimated_pose_to_radar_calibration;
+        first_pose_inv = first_pose.inverse();
+    }
+
+    // Get relative pose with camera to radar calibration
+    Eigen::Affine3d relative_pose =  first_pose_inv * pose * estimated_pose_to_radar_calibration;
+    Eigen::Quaterniond q_relative(relative_pose.rotation());
+
+    geometry_msgs::Pose pose_msg;
+    pose_msg.position.x = relative_pose.translation().x();
+    pose_msg.position.y = relative_pose.translation().y();
+    pose_msg.position.z = relative_pose.translation().z();
+    pose_msg.orientation.x = q_relative.x();
+    pose_msg.orientation.y = q_relative.y();
+    pose_msg.orientation.z = q_relative.z();
+    pose_msg.orientation.w = q_relative.w();
+
+    // push back to ground_truth_pose_array_msg_
+    ground_truth_pose_array_msg_.header = msg->header;
+    ground_truth_pose_array_msg_.header.frame_id = world_frame_id_;
+    ground_truth_pose_array_msg_.poses.push_back(pose_msg);    
 }
 
 void Radar4VoxMapROS::publishResults() {
@@ -248,6 +316,12 @@ void Radar4VoxMapROS::publishResults() {
     radar_points_pub_.publish(radar_points_pc2);
     estimated_pose_array_pub_.publish(est_pose_array_msg_);
     estimated_pose_pub_.publish(est_pose_msg_);
+
+    if (publish_ground_truth_pose_) {
+        if (ground_truth_pose_array_msg_.poses.size() > 0) {
+            ground_truth_pose_pub_.publish(ground_truth_pose_array_msg_);
+        }
+    }
     
     // Publish TF if enabled
     if (publish_tf_) {
