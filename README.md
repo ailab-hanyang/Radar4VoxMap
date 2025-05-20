@@ -39,11 +39,11 @@ Radar4VoxMap was primarily evaluated on the **View-of-Delft (VoD) dataset** ([Of
     To facilitate testing and reproduction of our results, we provide ROS bag files for selected sequences from the VoD dataset. These bags contain the necessary radar topics and ground truth information.
     *   **Download Link for VoD ROS Bags:** `Waiting for permission from the original author.`
 
-## Custom Dataset: Bitsensing AFI910 (Test Data)
+## Custom Dataset: bitsensing AFI910 (Test Data)
 
 In addition to the VoD dataset, we provide a sample custom dataset for testing and integration purposes. This dataset was collected using a different sensor setup:
 
-*   **Radar:** Bitsensing AFI910 4D Imaging Radar
+*   **Radar:** bitsensing AFI910 4D Imaging Radar
 *   **LiDAR:** Velodyne VLP-32C
 *   **GNSS/IMU:** Novatel PwrPak7
 *   **Camera:** CANLab Camera
@@ -52,13 +52,10 @@ In addition to the VoD dataset, we provide a sample custom dataset for testing a
 
 *   **Download Link for Custom Dataset ROS Bags:** [OneDrive](https://1drv.ms/f/s!Ai0drVzacIixsIVHvF_UflIhf1CdhA?e=9PaVcz)
 *   **Usage:** To use this dataset:
-    1.  Modify the `radar_4_vox_map_ros.launch` file (or your custom launch file).
-    2.  Set the `input_radar_topic` argument to the ROS topic publishing the Bitsensing AFI910 point cloud data.
-    3.  Set the `radar_dataset_type` argument to `afi910`.
-    *   Example launch command modification:
-        ```bash
-        roslaunch radar_4_vox_map radar_4_vox_map_ros.launch input_radar_topic:=/your_afi910_topic radar_dataset_type:=afi910
-        ```
+    To use the bitsensing AFI910 dataset, run the following command:
+    ```bash
+    roslaunch radar_4_vox_map radar_4_vox_map_afi910.launch
+    ```
     *   Refer to `ros/radar_point_converters.hpp` to see how the `afi910` type handles point field mapping.
 
 The comprehensive nature of the VoD dataset, particularly its high-quality 4D radar data and accurate ground truth, makes it an ideal platform for benchmarking radar-based odometry and SLAM systems.
