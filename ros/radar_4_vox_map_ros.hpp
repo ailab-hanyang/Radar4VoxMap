@@ -144,7 +144,6 @@ private:
     std::string radar_dataset_type_;
     std::string algorithm_ini_path_;
     std::string world_frame_id_;
-    std::string radar_frame_id_;
     std::string base_link_frame_id_;
     bool publish_tf_;
     bool publish_voxel_map_;
