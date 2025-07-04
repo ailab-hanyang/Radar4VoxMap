@@ -199,6 +199,10 @@ void Radar4VoxMapROS::radarCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
              radar_dataset_type_ == "AFI910") {
         radar_points_ptr = CRadarFieldMapping::TransformFromAfi910(*msg);
     }
+    else if (radar_dataset_type_ == "mfi920" || 
+             radar_dataset_type_ == "MFI920") {
+        radar_points_ptr = CRadarFieldMapping::TransformFromMfi920(*msg);
+    }
     else if (radar_dataset_type_ == "ars548" || 
              radar_dataset_type_ == "ARS548") {
         radar_points_ptr = CRadarFieldMapping::TransformFromArs548(*msg);
@@ -302,6 +306,10 @@ void Radar4VoxMapROS::publishResults() {
     }
     
     vertex_doppler_ = radar_4_vox_map_->GetVertexDopplerVel();
+    auto motion = radar_4_vox_map_->GetMotion();
+    std::vector<double> motion_vec = motion.first;
+    twist_velocity_ = Eigen::Vector3d(motion_vec[0], motion_vec[1], motion_vec[2]);
+    twist_angular_velocity_ = Eigen::Vector3d(motion_vec[3], motion_vec[4], motion_vec[5]);
     
     // Update and publish messages
     updateEstimatedPoseArrayGeo();

@@ -99,6 +99,43 @@ public:
 
         return radar_point_cloud_ptr;
     }
+
+    /**
+     * @brief View of Delft radar dataset format <new_field_name, original_field_name>
+     *        RadarPoint: x, y, z, range, azi, ele, rcs, vel, power
+     * @return RadarFieldMapping with fields set for View of Delft format
+     */
+    static RadarPointCloudPtr TransformFromMfi920(const sensor_msgs::PointCloud2& input_cloud) {
+        // Define field mapping
+        RadarFieldMapping mapping;
+        mapping.push_back(std::make_pair("x", "x"));
+        mapping.push_back(std::make_pair("y", "y"));
+        mapping.push_back(std::make_pair("z", "z"));
+        mapping.push_back(std::make_pair("range", ""));
+        mapping.push_back(std::make_pair("azi", ""));
+        mapping.push_back(std::make_pair("ele", ""));
+        mapping.push_back(std::make_pair("rcs", ""));
+        mapping.push_back(std::make_pair("vel", "velocity"));
+        mapping.push_back(std::make_pair("power", "power"));
+        std::unordered_map<std::string, sensor_msgs::PointField> input_fields_map = CreateInputFieldsMap(mapping, input_cloud);
+
+        // Remap point cloud fields based on the field mapping
+        MappingOption mapping_option;
+        mapping_option.remap_rcs_from_pwr = true;
+        mapping_option.remap_pwr_from_rcs = false;
+        mapping_option.remap_azi_ele_from_xyz = true;
+        mapping_option.remap_vel_from_vx_vy = false;
+        mapping_option.remap_range_from_xyz = true;
+        RadarPointCloudPtr radar_point_cloud_ptr = RemapPointCloud2Fields(input_cloud, input_fields_map, mapping_option);
+        // Reject power 255 points
+        RadarPointCloudPtr filtered_radar_point_cloud_ptr(new RadarPointCloud);
+        for (const auto& point : *radar_point_cloud_ptr) {
+            if (point.power != 255) {
+                filtered_radar_point_cloud_ptr->push_back(point);
+            }
+        }
+        return filtered_radar_point_cloud_ptr;
+    }
     
     /**
      * @brief  mapping that Customn be defined by users

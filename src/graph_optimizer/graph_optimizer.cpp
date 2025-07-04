@@ -134,6 +134,18 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
     edge_unary_icp->robustKernel()->setDelta(1.0);
     m_p_g2o_optimizer->addEdge(edge_unary_icp);
 
+    // Doppler Unary Edge
+    if ( m_config.use_doppler_unary_edge == true ) {
+        // Velocity based static point extractioni
+        EdgeUnaryDopplerType* edge_unary_doppler = new EdgeUnaryDopplerType();
+        edge_unary_doppler->setId(GetNewEdgeIndex());
+        edge_unary_doppler->setVertex(0, new_vertex);
+        edge_unary_doppler->setParameterId(0, 0);
+        edge_unary_doppler->setPointMeasurementAndInformation(converted_frame);
+        edge_unary_doppler->setInformationScale(m_config.edge_unary_doppler_information_scale);
+        m_p_g2o_optimizer->addEdge(edge_unary_doppler);
+    }
+
     // 4. add CV prediction edge between previous vertex and new vertex
     if ( m_p_g2o_optimizer->vertices().size() >= 2 ) {
         // std::cout<<"[GraphOptimizer] AddNewFrame: Add CV Prediction Edge"<<std::endl;

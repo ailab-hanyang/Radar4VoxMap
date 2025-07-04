@@ -20,13 +20,9 @@ void EdgePVDoppler::computeError() {
     const VertexPVRadar*        v1    = static_cast<const VertexPVRadar*>(_vertices[0]);
     // Convert velocity vector to local coordinate
     g2o::VectorN<PV_STATE_SIZE> state = v1->estimateVec();
-    double                      qw    = (1 - state[IDX_QX] * state[IDX_QX] - state[IDX_QY] * state[IDX_QY] - state[IDX_QZ] * state[IDX_QZ]);
-    Eigen::Quaterniond          q(qw, state[IDX_QX], state[IDX_QY], state[IDX_QZ]);
-    Eigen::Matrix<double, 3, 3> R = q.toRotationMatrix();
     Eigen::Vector3d             vel_body(state[IDX_VX], state[IDX_VY], state[IDX_VZ]);
-    Eigen::Vector3d             vel_local = R.transpose() * vel_body; // R: vertex의 orientation, vel_body: vertex의 global 속도벡터
 
-    _error = vel_local - _measurement;
+    _error = vel_body - _measurement;
 }
 
 void EdgePVDoppler::setMeasurement(const g2o::Vector3& measurement) {
@@ -55,6 +51,14 @@ void EdgePVDoppler::getInformation(std::vector<double>& information) const {
 }
 
 bool EdgePVDoppler::setPointMeasurementAndInformation(const std::vector<SRadarPoint>& points) {
+
+    const VertexPVRadar*        v1    = static_cast<const VertexPVRadar*>(_vertices[0]);
+    // Convert velocity vector to local coordinate
+    g2o::VectorN<PV_STATE_SIZE> state = v1->estimateVec();
+    std::vector<double>             vel_body = {state[IDX_VX], state[IDX_VY], state[IDX_VZ]};
+
+    auto static_points = ExtractStaticPoints(points, vel_body);
+
     // 3D 버전: is_static == true인 포인트만 처리
     std::vector<Eigen::Vector3d> A_data;
     std::vector<double>          b_data;
@@ -63,7 +67,7 @@ bool EdgePVDoppler::setPointMeasurementAndInformation(const std::vector<SRadarPo
     A_data.reserve(points.size());
     b_data.reserve(points.size());
 
-    for ( const auto& point : points ) {
+    for ( const auto& point : static_points ) {
         if ( point.is_static ) {
             // Normalize point by its range
             A_data.emplace_back(point.pose / point.range); // A(i, 0), A(i, 1), A(i, 2)
@@ -91,6 +95,7 @@ bool EdgePVDoppler::setPointMeasurementAndInformation(const std::vector<SRadarPo
     Eigen::Vector3d       coeffs = (ATA).ldlt().solve(A.transpose() * b);
 
     // save result to _measurement
+    // std::cout << "coeffs " << coeffs.transpose() << std::endl;
     _measurement = g2o::Vector3(coeffs(0), coeffs(1), coeffs(2));
 
     // calculate Sigma
@@ -110,4 +115,39 @@ bool EdgePVDoppler::setPointMeasurementAndInformation(const std::vector<SRadarPo
     information_from_points = covariance.inverse().matrix();
 
     return true;
+}
+
+std::vector<SRadarPoint> EdgePVDoppler::ExtractStaticPoints(const std::vector<SRadarPoint>& points, std::vector<double> velocity) {
+    // Calculate expected doppler velocity using given velocity and point position
+    // Expected doppler = (velocity_vector · point_position_normalized)
+    std::vector<double> expected_doppler(points.size());
+    std::vector<double> doppler_residual(points.size());
+    
+    for ( size_t i = 0; i < points.size(); ++i ) {
+        // Normalize point position by range
+        Eigen::Vector3d point_normalized = points[i].pose / points[i].range;
+        
+        // Calculate expected doppler velocity: v · (p/|p|)
+        // velocity is [vx, vy, vz] and point_normalized is normalized position
+        expected_doppler[i] = velocity[0] * point_normalized.x() + 
+                             velocity[1] * point_normalized.y() + 
+                             velocity[2] * point_normalized.z();
+        
+        // Calculate residual between measured and expected doppler
+        doppler_residual[i] = points[i].vel - expected_doppler[i];
+    }
+
+    // Extract static points based on low doppler residual
+    std::vector<SRadarPoint> static_points;
+    const double residual_threshold = 0.5; // threshold for static point classification
+    
+    for ( size_t i = 0; i < points.size(); ++i ) {
+        if ( std::abs(doppler_residual[i]) < residual_threshold ) {
+            auto point = points[i];
+            point.is_static = true;
+            static_points.push_back(std::move(point));
+        }
+    }
+    
+    return static_points;
 }

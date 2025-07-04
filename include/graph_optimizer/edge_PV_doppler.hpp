@@ -32,6 +32,8 @@ public:
 
     virtual bool setPointMeasurementAndInformation(const std::vector<SRadarPoint>& points);
 
+    static std::vector<SRadarPoint> ExtractStaticPoints(const std::vector<SRadarPoint>& points, std::vector<double> velocity);
+
     Eigen::Matrix<double, 3, 3> information_from_points;
     double information_scale;
 };

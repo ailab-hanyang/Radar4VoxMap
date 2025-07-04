@@ -2,7 +2,7 @@
 <launch>
     <!-- Launch arguments -->
     <arg name="input_radar_topic" default="/radar/points" />
-    <!-- radar dataset type: vod, afi910, custom -->
+    <!-- radar dataset type: vod, afi910, mfi920, ars548, custom -->
     <arg name="radar_dataset_type" default="vod" />
     <arg name="algorithm_ini_path" default="config/radar_4_vox_map/radar_4_vox_map_config.ini" />
     <arg name="world_frame_id" default="world" />
