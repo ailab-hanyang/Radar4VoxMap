@@ -34,24 +34,35 @@ void EdgePVPVPrediction::computeError() {
     if ( dt < FLT_MIN ) {
         dt = 0.1;
     }
+
+    // --- Mid-point Integration with Robust Error Calculation ---
     g2o::VectorN<PV_STATE_SIZE> v1_mid_prior = Prediction(v1_estimate, dt*0.5);
     g2o::VectorN<PV_STATE_SIZE> v2_mid_prior = Prediction(v2_estimate, -dt*0.5);
 
-    double qw_1 = std::sqrt(1 - v1_mid_prior[IDX_QX] * v1_mid_prior[IDX_QX] - v1_mid_prior[IDX_QY] * v1_mid_prior[IDX_QY] - v1_mid_prior[IDX_QZ] * v1_mid_prior[IDX_QZ]);
-    double qw_2 = std::sqrt(1 - v2_mid_prior[IDX_QX] * v2_mid_prior[IDX_QX] - v2_mid_prior[IDX_QY] * v2_mid_prior[IDX_QY] - v2_mid_prior[IDX_QZ] * v2_mid_prior[IDX_QZ]);
-
+    // 1. Robustly reconstruct quaternions for the two mid-point states
+    double q1_norm_sq = v1_mid_prior.segment<3>(IDX_QX).squaredNorm();
+    double qw_1 = (q1_norm_sq < 1.0) ? std::sqrt(1.0 - q1_norm_sq) : 0.0;
     Eigen::Quaterniond q1(qw_1, v1_mid_prior[IDX_QX], v1_mid_prior[IDX_QY], v1_mid_prior[IDX_QZ]);
+
+    double q2_norm_sq = v2_mid_prior.segment<3>(IDX_QX).squaredNorm();
+    double qw_2 = (q2_norm_sq < 1.0) ? std::sqrt(1.0 - q2_norm_sq) : 0.0;
     Eigen::Quaterniond q2(qw_2, v2_mid_prior[IDX_QX], v2_mid_prior[IDX_QY], v2_mid_prior[IDX_QZ]);
+    
+    // 2. Build the error vector component-wise
+    // Positional error
+    _error.segment<3>(IDX_X) = v2_mid_prior.segment<3>(IDX_X) - v1_mid_prior.segment<3>(IDX_X);
+    // Linear velocity error
+    _error.segment<3>(IDX_VX) = v2_mid_prior.segment<3>(IDX_VX) - v1_mid_prior.segment<3>(IDX_VX);
+    // Angular velocity error
+    _error.segment<3>(IDX_WX) = v2_mid_prior.segment<3>(IDX_WX) - v1_mid_prior.segment<3>(IDX_WX);
 
-    Eigen::Quaterniond q_error = q1.inverse() * q2;
-    Eigen::Vector3d   q_error_xyz = {q_error.x(), q_error.y(), q_error.z()};
+    // Rotational error
+    Eigen::Quaterniond q_error_quat = q1.inverse() * q2;
+    if (q_error_quat.w() < 0) {
+        q_error_quat.coeffs() *= -1.0;
+    }
+    _error.segment<3>(IDX_QX) = 2.0 * q_error_quat.vec();
 
-    _error       = v2_mid_prior - v1_mid_prior;
-    _error[IDX_QX] = q_error_xyz[0];
-    _error[IDX_QY] = q_error_xyz[1];
-    _error[IDX_QZ] = q_error_xyz[2];
-    // _measurement = Prediction(v1_estimate, dt);
-    // _error       = v2_estimate - _measurement;
     if ( _information.isApprox(g2o::MatrixN<PV_STATE_SIZE>::Identity()) ) {
         _information = information_wo_dt / (dt * dt);
     }
@@ -59,36 +70,39 @@ void EdgePVPVPrediction::computeError() {
 
 g2o::VectorN<PV_STATE_SIZE> EdgePVPVPrediction::Prediction(const g2o::VectorN<PV_STATE_SIZE>& state, double dt) {
     g2o::VectorN<PV_STATE_SIZE> prior;
-    // Linear prediction
-    prior[IDX_X]  = state[IDX_X] + state[IDX_VX] * dt;
-    prior[IDX_Y]  = state[IDX_Y] + state[IDX_VY] * dt;
-    prior[IDX_Z]  = state[IDX_Z] + state[IDX_VZ] * dt;
+
+    // Reconstruct current orientation from state vector
+    double             qw = std::sqrt(1 - state[IDX_QX] * state[IDX_QX] - state[IDX_QY] * state[IDX_QY] - state[IDX_QZ] * state[IDX_QZ]);
+    Eigen::Quaterniond q_current(qw, state[IDX_QX], state[IDX_QY], state[IDX_QZ]);
+    q_current.normalize();
+
+    // Linear prediction (assuming velocity is in the body frame)
+    // 1. Get body-frame velocity
+    Eigen::Vector3d v_body(state[IDX_VX], state[IDX_VY], state[IDX_VZ]);
+    // 2. Rotate body-frame velocity to world frame
+    Eigen::Vector3d v_world = q_current * v_body; 
+    // 3. Predict next position in world frame
+    prior[IDX_X]  = state[IDX_X] + v_world.x() * dt;
+    prior[IDX_Y]  = state[IDX_Y] + v_world.y() * dt;
+    prior[IDX_Z]  = state[IDX_Z] + v_world.z() * dt;
+    // 4. Assume constant velocity in body frame
     prior[IDX_VX] = state[IDX_VX];
     prior[IDX_VY] = state[IDX_VY];
     prior[IDX_VZ] = state[IDX_VZ];
 
-    // Angular prediction
-    double             qw = std::sqrt(1 - state[IDX_QX] * state[IDX_QX] - state[IDX_QY] * state[IDX_QY] - state[IDX_QZ] * state[IDX_QZ]);
-    Eigen::Quaterniond q_current(qw, state[IDX_QX], state[IDX_QY], state[IDX_QZ]);
-
-    // angular velocity vector
+    // Angular prediction (angular velocity is already in body frame)
+    // 1. get angular velocity vector
     Eigen::Vector3d omega(state[IDX_WX], state[IDX_WY], state[IDX_WZ]);
     double          omega_norm = omega.norm();
 
-    // small rotation based on angular velocity
+    // 2. Calculate small rotation based on angular velocity
     Eigen::Quaterniond q_delta;
-    if ( omega_norm > 1e-6 ) {
-        double          half_angle = 0.5 * omega_norm * dt;
-        Eigen::Vector3d axis       = omega.normalized();
-        q_delta = Eigen::Quaterniond(std::cos(half_angle), std::sin(half_angle) * axis.x(), std::sin(half_angle) * axis.y(),
-                                     std::sin(half_angle) * axis.z());
-    }
-    else {
-        // small rotation, almost no change, use unit quaternion
-        q_delta = Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0);
-    }
+    double          half_angle = 0.5 * omega_norm * dt;
+    Eigen::Vector3d axis       = omega.normalized();
+    q_delta = Eigen::Quaterniond(std::cos(half_angle), std::sin(half_angle) * axis.x(), std::sin(half_angle) * axis.y(),
+                                    std::sin(half_angle) * axis.z());
 
-    // update new quaternion
+    // 3. update new orientation
     Eigen::Quaterniond q_new = q_current * q_delta;
     q_new.normalize(); // normalize to maintain numerical stability
 
@@ -97,6 +111,7 @@ g2o::VectorN<PV_STATE_SIZE> EdgePVPVPrediction::Prediction(const g2o::VectorN<PV
     prior[IDX_QZ] = q_new.z();
     // quaternion w is not calculated, so it is skipped
 
+    // 4. Assume constant angular velocity in body frame
     prior[IDX_WX] = state[IDX_WX];
     prior[IDX_WY] = state[IDX_WY];
     prior[IDX_WZ] = state[IDX_WZ];

@@ -89,6 +89,12 @@ private:
      * @return Current pose as geometry_msgs::PoseStamped
      */
     geometry_msgs::PoseStamped getEstimatedPoseMsg();
+
+    /**
+     * @brief Get the current twist as TwistStamped
+     * @return Current twist as geometry_msgs::TwistStamped
+     */
+    geometry_msgs::TwistStamped getTwistStampedMsg();
     
     /**
      * @brief Get the TF transform from world to base_link
@@ -136,6 +142,7 @@ private:
     ros::Publisher graph_marker_array_pub_;
     ros::Publisher graph_vertex_pose_array_pub_;
     ros::Publisher estimated_pose_pub_;
+    ros::Publisher twist_pub_;
     ros::Publisher tf_pub_;
     ros::Publisher ground_truth_pose_pub_;
     
@@ -161,6 +168,8 @@ private:
     std::pair<GraphOptimizer::AlgoResultTuple, GraphOptimizer::AlgoResultTuple> results_;
     Eigen::Matrix4d radar_pose_;
     ros::Time current_ros_time_;
+    Eigen::Vector3d twist_velocity_;
+    Eigen::Vector3d twist_angular_velocity_;
     double current_timestamp_;
     
     // Visualization data
@@ -179,6 +188,7 @@ private:
     visualization_msgs::MarkerArray graph_marker_array_;
     geometry_msgs::PoseArray graph_node_pose_array_msg_;
     geometry_msgs::PoseStamped est_pose_msg_;
+    geometry_msgs::TwistStamped twist_stamped_msg_;
     geometry_msgs::PoseArray ground_truth_pose_array_msg_;
     tf2_msgs::TFMessage tf_message_msg_;
     

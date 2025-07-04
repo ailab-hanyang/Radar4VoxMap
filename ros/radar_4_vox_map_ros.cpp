@@ -171,7 +171,8 @@ void Radar4VoxMapROS::setupROSInterface() {
     graph_marker_array_pub_      = nh_.advertise<visualization_msgs::MarkerArray>("/radar_4_vox_map/graph_marker_array", 5);
     graph_vertex_pose_array_pub_ = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/graph_vertex_pose_array", 5);
     estimated_pose_pub_          = nh_.advertise<geometry_msgs::PoseStamped>("/radar_4_vox_map/estimated_pose", 5);
-    ground_truth_pose_pub_        = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/ground_truth_pose_array", 5);
+    twist_pub_                   = nh_.advertise<geometry_msgs::TwistStamped>("/radar_4_vox_map/twist", 5);
+    ground_truth_pose_pub_       = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/ground_truth_pose_array", 5);
     tf_pub_                      = nh_.advertise<tf2_msgs::TFMessage>("/tf", 10);
 
     // Setup subscriber with queue size 10
@@ -197,6 +198,10 @@ void Radar4VoxMapROS::radarCallback(const sensor_msgs::PointCloud2::ConstPtr& ms
     else if (radar_dataset_type_ == "afi910" || 
              radar_dataset_type_ == "AFI910") {
         radar_points_ptr = CRadarFieldMapping::TransformFromAfi910(*msg);
+    }
+    else if (radar_dataset_type_ == "ars548" || 
+             radar_dataset_type_ == "ARS548") {
+        radar_points_ptr = CRadarFieldMapping::TransformFromArs548(*msg);
     }
     else if (radar_dataset_type_ == "custom" || 
              radar_dataset_type_ == "Custom") {
@@ -303,6 +308,7 @@ void Radar4VoxMapROS::publishResults() {
     publishGraphVisualization();
     
     est_pose_msg_ = getEstimatedPoseMsg();
+    twist_stamped_msg_ = getTwistStampedMsg();
     
     // Convert to PointCloud2 and publish
     std_msgs::Header header;
@@ -316,6 +322,7 @@ void Radar4VoxMapROS::publishResults() {
     radar_points_pub_.publish(radar_points_pc2);
     estimated_pose_array_pub_.publish(est_pose_array_msg_);
     estimated_pose_pub_.publish(est_pose_msg_);
+    twist_pub_.publish(twist_stamped_msg_);
 
     if (publish_ground_truth_pose_) {
         if (ground_truth_pose_array_msg_.poses.size() > 0) {
@@ -377,6 +384,19 @@ void Radar4VoxMapROS::updateEstimatedPoseArrayGeo() {
     est_pose_array_msg_.header.frame_id = world_frame_id_;
     est_pose_array_msg_.header.stamp = current_ros_time_;
     est_pose_array_msg_.poses.push_back(est_pose_msg);
+}
+
+geometry_msgs::TwistStamped Radar4VoxMapROS::getTwistStampedMsg() {
+    geometry_msgs::TwistStamped twist_msg;
+    twist_msg.header.frame_id = base_link_frame_id_;
+    twist_msg.header.stamp = current_ros_time_;
+    twist_msg.twist.linear.x = twist_velocity_.x();
+    twist_msg.twist.linear.y = twist_velocity_.y();
+    twist_msg.twist.linear.z = twist_velocity_.z();
+    twist_msg.twist.angular.x = twist_angular_velocity_.x();
+    twist_msg.twist.angular.y = twist_angular_velocity_.y();
+    twist_msg.twist.angular.z = twist_angular_velocity_.z();
+    return twist_msg;
 }
 
 geometry_msgs::PoseStamped Radar4VoxMapROS::getEstimatedPoseMsg() {

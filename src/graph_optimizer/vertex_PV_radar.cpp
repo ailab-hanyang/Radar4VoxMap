@@ -55,16 +55,32 @@ void VertexPVRadar::oplusImpl(const double* update) {
                                       _estimate[IDX_QZ] * _estimate[IDX_QZ]));
     Eigen::Quaterniond q_current(qw, _estimate[IDX_QX], _estimate[IDX_QY], _estimate[IDX_QZ]);
 
-    // Update angular velocity vector
-    double update_wx = std::max(0.0, std::sqrt(1 - update[IDX_QX] * update[IDX_QX] - update[IDX_QY] * update[IDX_QY] - update[IDX_QZ] * update[IDX_QZ]));
-    Eigen::Quaterniond update_quat(update_wx, update[IDX_QX], update[IDX_QY], update[IDX_QZ]);
-    Eigen::Vector3d update_quat_vec(update[IDX_QX], update[IDX_QY], update[IDX_QZ]);
-    double          half_angle = update_quat_vec.norm();
+    // Update quaternion using small angle approximation
+    // For small rotations, we can approximate the quaternion update as:
+    // q_new = q_current * [1, dx/2, dy/2, dz/2]
+    Eigen::Vector3d update_vec(update[IDX_QX], update[IDX_QY], update[IDX_QZ]);
+    double update_norm = update_vec.norm();
 
-    // // Calculate the small rotation based on angular velocity (delta quaternion)
-    // Update the new quaternion
-    Eigen::Quaterniond q_new = q_current * update_quat;
-    q_new.normalize(); // Normalize to maintain numerical stability
+    Eigen::Quaterniond q_delta;
+    if (update_norm > 1e-6) {
+        // If rotation is large enough, use proper quaternion
+        double half_angle = update_norm / 2.0;
+        Eigen::Vector3d axis = update_vec / update_norm;
+        q_delta = Eigen::Quaterniond(std::cos(half_angle), 
+                                   axis.x() * std::sin(half_angle),
+                                   axis.y() * std::sin(half_angle), 
+                                   axis.z() * std::sin(half_angle));
+    } else {
+        // For very small rotations, use linear approximation
+        q_delta = Eigen::Quaterniond(1.0, update[IDX_QX]/2.0, 
+                                        update[IDX_QY]/2.0, 
+                                        update[IDX_QZ]/2.0);
+    }
+
+    // Update the quaternion and normalize
+    Eigen::Quaterniond q_new = q_current * q_delta;
+    q_new.normalize();
+
 
     _estimate[IDX_QX] = q_new.x();
     _estimate[IDX_QY] = q_new.y();

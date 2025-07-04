@@ -493,6 +493,55 @@ GraphOptimizer::PairAlgoResultTuple GraphOptimizer::GetLastVertexInfo() {
     return std::make_pair(latest_node, oldest_node);
 }
 
+std::pair<std::vector<double>, std::vector<double>> GraphOptimizer::GetMotion() {
+    if ( m_p_g2o_optimizer->vertices().empty() == true ) {
+        return std::make_pair(std::vector<double>(6, 0.0), std::vector<double>(6, 0.0));
+    }
+
+    // Get the last vertex
+    VertexType* lastest_vertex = dynamic_cast<VertexType*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
+    if ( lastest_vertex == nullptr ) {
+        return std::make_pair(std::vector<double>(6, 0.0), std::vector<double>(6, 0.0));
+    }
+
+    // Get the oldest vertex
+    int         min_id        = std::numeric_limits<int>::max();
+    VertexType* oldest_vertex = nullptr;
+    for ( const auto& v_pair : m_p_g2o_optimizer->vertices() ) {
+        auto vertex = dynamic_cast<VertexType*>(v_pair.second);
+        if ( vertex != nullptr && v_pair.first < min_id && vertex->fixed() == false ) {
+            min_id        = v_pair.first;
+            oldest_vertex = vertex;
+        }
+    }
+    if ( oldest_vertex == nullptr ) {
+        return std::make_pair(std::vector<double>(6, 0.0), std::vector<double>(6, 0.0));
+    }
+
+    // Get motion
+    g2o::VectorN<PV_STATE_SIZE> last_vertex_estimate_vec = lastest_vertex->estimateVec();
+    g2o::VectorN<PV_STATE_SIZE> oldest_vertex_estimate_vec = oldest_vertex->estimateVec();
+
+    std::vector<double> last_vertex_motion = std::vector<double>(6, 0.0);
+    std::vector<double> oldest_vertex_motion = std::vector<double>(6, 0.0);
+
+    last_vertex_motion[0] = last_vertex_estimate_vec[IDX_VX];
+    last_vertex_motion[1] = last_vertex_estimate_vec[IDX_VY];
+    last_vertex_motion[2] = last_vertex_estimate_vec[IDX_VZ];
+    last_vertex_motion[3] = last_vertex_estimate_vec[IDX_WX];
+    last_vertex_motion[4] = last_vertex_estimate_vec[IDX_WY];
+    last_vertex_motion[5] = last_vertex_estimate_vec[IDX_WZ];
+    
+    oldest_vertex_motion[0] = oldest_vertex_estimate_vec[IDX_VX];
+    oldest_vertex_motion[1] = oldest_vertex_estimate_vec[IDX_VY];
+    oldest_vertex_motion[2] = oldest_vertex_estimate_vec[IDX_VZ];
+    oldest_vertex_motion[3] = oldest_vertex_estimate_vec[IDX_WX];
+    oldest_vertex_motion[4] = oldest_vertex_estimate_vec[IDX_WY];
+    oldest_vertex_motion[5] = oldest_vertex_estimate_vec[IDX_WZ];
+
+    return std::make_pair(last_vertex_motion, oldest_vertex_motion);
+}
+
 std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>, std::vector<SVisEdgeUnary>> GraphOptimizer::GetAllGraphElements() const {
     std::vector<SVisVertex>     o_vec_vertex;
     std::vector<SVisEdgeBinary> o_vec_binary_edge;

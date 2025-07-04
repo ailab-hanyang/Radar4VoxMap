@@ -107,6 +107,39 @@ public:
      * 
      * @return RadarFieldMapping with empty fields for users to define
      */
+    static RadarPointCloudPtr TransformFromArs548(const sensor_msgs::PointCloud2& input_cloud) {
+        // Define field mapping
+        RadarFieldMapping mapping;
+        mapping.push_back(std::make_pair("x", "x"));
+        mapping.push_back(std::make_pair("y", "y"));
+        mapping.push_back(std::make_pair("z", "z"));
+        mapping.push_back(std::make_pair("range", "r"));
+        mapping.push_back(std::make_pair("azi", "azimuth"));
+        mapping.push_back(std::make_pair("ele", ""));
+        mapping.push_back(std::make_pair("rcs", "RCS"));
+        mapping.push_back(std::make_pair("vel", "v"));
+        mapping.push_back(std::make_pair("power", ""));
+        std::unordered_map<std::string, sensor_msgs::PointField> input_fields_map = CreateInputFieldsMap(mapping, input_cloud);
+
+        // Remap point cloud fields based on the field mapping
+        MappingOption mapping_option;
+        mapping_option.remap_rcs_from_pwr = false;
+        mapping_option.remap_pwr_from_rcs = true;
+        mapping_option.remap_azi_ele_from_xyz = true;
+        mapping_option.remap_vel_from_vx_vy = false;
+        mapping_option.remap_range_from_xyz = false;
+        RadarPointCloudPtr radar_point_cloud_ptr = RemapPointCloud2Fields(input_cloud, input_fields_map, mapping_option);
+
+        return radar_point_cloud_ptr;
+    }
+
+    /**
+     * @brief  mapping that Customn be defined by users
+     * 
+     * User need to fill in the fields that they want to use
+     * 
+     * @return RadarFieldMapping with empty fields for users to define
+     */
     static RadarPointCloudPtr Custom(const sensor_msgs::PointCloud2& input_cloud) {
         // Define field mapping
         RadarFieldMapping mapping;

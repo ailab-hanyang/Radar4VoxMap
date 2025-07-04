@@ -60,6 +60,7 @@ public:
     void                UpdateGraph();
     void                UpdateVoxelMap();
     PairAlgoResultTuple GetLastVertexInfo();
+    std::pair<std::vector<double>, std::vector<double>> GetMotion();
 
 public:
     std::vector<VoxelHashMap::VoxelBlock> GetAllVoxelFromMap() const {

@@ -85,6 +85,12 @@ std::pair<GraphOptimizer::AlgoResultTuple, GraphOptimizer::AlgoResultTuple> Rada
     elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     // std::cout << "[Radar4VoxMap] GetLastVertexInfo executed in " << (elapsed_us / 1000.0) << " ms" << std::endl;
 
+    // 7. Get the motion
+    start = std::chrono::steady_clock::now();
+    m_motion = m_graph_optimizer.GetMotion();
+    end = std::chrono::steady_clock::now();
+    elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    // std::cout << "[Radar4VoxMap] GetMotion executed in " << (elapsed_us / 1000.0) << " ms" << std::endl;
 
     auto end_core = std::chrono::steady_clock::now();
     auto elapsed_core_us = std::chrono::duration_cast<std::chrono::microseconds>(end_core - start_core).count();

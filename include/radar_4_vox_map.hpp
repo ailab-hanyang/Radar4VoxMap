@@ -27,7 +27,7 @@ public:
 
 // Birth
 public:
-    Radar4VoxMap() : m_tbb_arena(tbb::task_arena::automatic), m_tbb_group(){};
+    Radar4VoxMap() : m_tbb_arena(tbb::task_arena::automatic), m_tbb_group(), m_motion(std::make_pair(std::vector<double>(6, 0.0), std::vector<double>(6, 0.0))){};
     ~Radar4VoxMap() {m_tbb_arena.execute([&] { m_tbb_group.wait(); });};
 
     void Init(VoxelRcsMapperConfig config);
@@ -35,6 +35,7 @@ public:
 // Core
 public:
     std::pair<GraphOptimizer::AlgoResultTuple, GraphOptimizer::AlgoResultTuple> RunCore(std::vector<RadarPoint> points, const double i_radar_timestamp_sec);
+    std::pair<std::vector<double>, std::vector<double>> GetMotion(){return m_motion;};
     std::vector<VoxelHashMap::VoxelBlock> GetAllVoxelFromMap() const {return m_graph_optimizer.GetAllVoxelFromMap();};
     std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>,std::vector<SVisEdgeUnary>> GetAllGraphElements() const {return m_graph_optimizer.GetAllGraphElements();};
     std::vector<SVisEdgeUnaryDoppler> GetVertexDopplerVel() const {return m_graph_optimizer.GetVertexDopplerVel();};
@@ -51,7 +52,7 @@ private:
 
 private:
     VoxelRcsMapperConfig m_config;
-
+    std::pair<std::vector<double>, std::vector<double>> m_motion;
     GraphOptimizer m_graph_optimizer;
     // VoxelHashMap m_voxel_hash_map;
 
