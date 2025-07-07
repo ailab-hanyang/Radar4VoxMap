@@ -52,12 +52,12 @@ void EdgePVDoppler::getInformation(std::vector<double>& information) const {
 
 bool EdgePVDoppler::setPointMeasurementAndInformation(const std::vector<SRadarPoint>& points) {
 
-    const VertexPVRadar*        v1    = static_cast<const VertexPVRadar*>(_vertices[0]);
-    // Convert velocity vector to local coordinate
-    g2o::VectorN<PV_STATE_SIZE> state = v1->estimateVec();
-    std::vector<double>             vel_body = {state[IDX_VX], state[IDX_VY], state[IDX_VZ]};
+    // const VertexPVRadar*        v1    = static_cast<const VertexPVRadar*>(_vertices[0]);
+    // // Convert velocity vector to local coordinate
+    // g2o::VectorN<PV_STATE_SIZE> state = v1->estimateVec();
+    // std::vector<double>             vel_body = {state[IDX_VX], state[IDX_VY], state[IDX_VZ]};
 
-    auto static_points = ExtractStaticPoints(points, vel_body);
+    // auto static_points = ExtractStaticPoints(points, vel_body);
 
     // 3D 버전: is_static == true인 포인트만 처리
     std::vector<Eigen::Vector3d> A_data;
@@ -67,7 +67,7 @@ bool EdgePVDoppler::setPointMeasurementAndInformation(const std::vector<SRadarPo
     A_data.reserve(points.size());
     b_data.reserve(points.size());
 
-    for ( const auto& point : static_points ) {
+    for ( const auto& point : points ) {
         if ( point.is_static ) {
             // Normalize point by its range
             A_data.emplace_back(point.pose / point.range); // A(i, 0), A(i, 1), A(i, 2)

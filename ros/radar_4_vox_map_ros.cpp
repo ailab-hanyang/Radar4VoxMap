@@ -32,6 +32,7 @@ bool Radar4VoxMapROS::initialize() {
     // Load parameters
     nh_.param<std::string>("radar_topic", radar_topic_, "/radar/points");
     nh_.param<std::string>("radar_dataset_type", radar_dataset_type_, "vod");
+    nh_.param<std::string>("radar_4_vox_map_type", radar_4_vox_map_type_, "3d");
     nh_.param<std::string>("algorithm_ini_path", algorithm_ini_path_, "config/radar_4_vox_map.ini");
     nh_.param<std::string>("world_frame_id", world_frame_id_, "world");
     nh_.param<std::string>("base_link_frame_id", base_link_frame_id_, "base_link");
@@ -44,6 +45,7 @@ bool Radar4VoxMapROS::initialize() {
     ROS_INFO("Radar4VoxMapROS initializing with parameters:");
     ROS_INFO_STREAM("  radar_topic: " << radar_topic_);
     ROS_INFO_STREAM("  radar_dataset_type: " << radar_dataset_type_);
+    ROS_INFO_STREAM("  radar_4_vox_map_type: " << radar_4_vox_map_type_);
     ROS_INFO_STREAM("  algorithm_ini_path: " << algorithm_ini_path_);
     ROS_INFO_STREAM("  world_frame_id: " << world_frame_id_);
     ROS_INFO_STREAM("  base_link_frame_id: " << base_link_frame_id_);
@@ -153,6 +155,12 @@ bool Radar4VoxMapROS::initialize() {
     if (!radar_4_vox_map_) {
         ROS_ERROR("Failed to create radar_4_vox_map instance");
         return false;
+    }
+
+    if (radar_4_vox_map_type_ == "3d") {
+        radar_4_vox_map_ = std::make_shared<Radar4VoxMap>();
+    } else if (radar_4_vox_map_type_ == "2d") {
+        radar_4_vox_map_ = std::make_shared<Radar4VoxMap2D>();
     }
     
     radar_4_vox_map_->Init(vox_map_config_);
@@ -354,7 +362,31 @@ void Radar4VoxMapROS::publishResults() {
 
 void Radar4VoxMapROS::publishVoxelMap() {
     // Get voxel blocks from map
-    global_voxel_block_ = radar_4_vox_map_->GetAllVoxelFromMap();
+    if (radar_4_vox_map_type_ == "2d") {
+        global_voxel_block_.clear();
+        auto global_voxel_block_2d = radar_4_vox_map_->GetAllVoxelFromMap2D();
+        for ( auto& voxel : global_voxel_block_2d ) {
+            VoxelHashMap::VoxelBlock voxel_block;
+            voxel_block.points = voxel.points;
+            voxel_block.covariance.cov = Eigen::Matrix3d::Zero();
+            voxel_block.covariance.cov.block<2, 2>(0, 0) = voxel.covariance.cov;
+            voxel_block.covariance.cov(2, 2) = 0.0001;
+            voxel_block.covariance.mean = Eigen::Vector3d::Zero();
+            voxel_block.covariance.mean.head<2>() = voxel.covariance.mean;
+            voxel_block.covariance.mean(2) = 0.0;
+            voxel_block.voxel_center.head<2>() = voxel.voxel_center;
+            voxel_block.voxel_center(2) = 0.0;
+            voxel_block.hash_value = voxel.hash_value;
+            voxel_block.ref_rcs = voxel.ref_rcs;
+            voxel_block.is_static = voxel.is_static;
+            voxel_block.max_num_points = voxel.max_num_points;
+            voxel_block.is_changed = voxel.is_changed;
+            global_voxel_block_.push_back(voxel_block);
+        }
+    }
+    else {
+        global_voxel_block_ = radar_4_vox_map_->GetAllVoxelFromMap();
+    }
     
     // Convert to visualization messages
     voxel_map_marker_array_ = getVoxelMapMarkerArray();
@@ -502,13 +534,12 @@ visualization_msgs::MarkerArray Radar4VoxMapROS::getVoxelMapMarkerArray() {
             marker_array.markers.push_back(text_marker);
             continue;
         }
-        
         // Setup covariance ellipsoid marker
         cov_marker.header.frame_id = world_frame_id_;
         cov_marker.header.stamp = current_ros_time_;
         cov_marker.ns = "covariance";
         cov_marker.id = i * 2;
-        cov_marker.type = visualization_msgs::Marker::SPHERE;
+        cov_marker.type = visualization_msgs::Marker::CYLINDER;
         cov_marker.action = visualization_msgs::Marker::ADD;
         
         // Set position to mean
@@ -565,30 +596,30 @@ visualization_msgs::MarkerArray Radar4VoxMapROS::getVoxelMapMarkerArray() {
         cov_marker.color = rcs_color;
         marker_array.markers.push_back(cov_marker);
         
-        // Add text marker with voxel information
-        text_marker.header.frame_id = world_frame_id_;
-        text_marker.header.stamp = current_ros_time_;
-        text_marker.ns = "covariance_info";
-        text_marker.id = i * 2 + 1;
-        text_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-        text_marker.action = visualization_msgs::Marker::ADD;
-        text_marker.pose.position.x = voxel.voxel_center(0);
-        text_marker.pose.position.y = voxel.voxel_center(1);
-        text_marker.pose.position.z = voxel.voxel_center(2);
-        text_marker.scale.z = 0.15;
-        text_marker.color.r = text_marker.color.g = text_marker.color.b = 1.0;
-        text_marker.color.a = 0.8;
+        // // Add text marker with voxel information
+        // text_marker.header.frame_id = world_frame_id_;
+        // text_marker.header.stamp = current_ros_time_;
+        // text_marker.ns = "covariance_info";
+        // text_marker.id = i * 2 + 1;
+        // text_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+        // text_marker.action = visualization_msgs::Marker::ADD;
+        // text_marker.pose.position.x = voxel.voxel_center(0);
+        // text_marker.pose.position.y = voxel.voxel_center(1);
+        // text_marker.pose.position.z = voxel.voxel_center(2);
+        // text_marker.scale.z = 0.15;
+        // text_marker.color.r = text_marker.color.g = text_marker.color.b = 1.0;
+        // text_marker.color.a = 0.8;
         
-        // Format voxel information
-        std::ostringstream display_text;
-        display_text << "Mean: [" << dist_mean(0) << ", " << dist_mean(1) << ", " << dist_mean(2) << "]"
-                     << "\nMax RCS: " << voxel.ref_rcs
-                     << "\nPoint Num: " << voxel.points.size()
-                     << "\nVoxel Center: [" << voxel.voxel_center(0) << ", " 
-                     << voxel.voxel_center(1) << ", " << voxel.voxel_center(2) << "]";
+        // // Format voxel information
+        // std::ostringstream display_text;
+        // display_text << "Mean: [" << dist_mean(0) << ", " << dist_mean(1) << ", " << dist_mean(2) << "]"
+        //              << "\nMax RCS: " << voxel.ref_rcs
+        //              << "\nPoint Num: " << voxel.points.size()
+        //              << "\nVoxel Center: [" << voxel.voxel_center(0) << ", " 
+        //              << voxel.voxel_center(1) << ", " << voxel.voxel_center(2) << "]";
         
-        text_marker.text = display_text.str();
-        marker_array.markers.push_back(text_marker);
+        // text_marker.text = display_text.str();
+        // marker_array.markers.push_back(text_marker);
     }
     
     // Delete any previously existing markers that are no longer needed

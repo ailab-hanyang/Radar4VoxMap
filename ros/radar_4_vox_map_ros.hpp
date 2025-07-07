@@ -149,6 +149,7 @@ private:
     // ROS parameters
     std::string radar_topic_;
     std::string radar_dataset_type_;
+    std::string radar_4_vox_map_type_;
     std::string algorithm_ini_path_;
     std::string world_frame_id_;
     std::string base_link_frame_id_;
@@ -161,7 +162,7 @@ private:
     CRadarFieldMapping field_mapping_;
     
     // radar_4_vox_map related members
-    std::shared_ptr<Radar4VoxMap> radar_4_vox_map_;
+    std::shared_ptr<Radar4VoxMapBase> radar_4_vox_map_;
     VoxelRcsMapperConfig vox_map_config_;
     
     // Processing data

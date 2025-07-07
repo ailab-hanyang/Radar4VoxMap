@@ -4,6 +4,8 @@
     <arg name="input_radar_topic" default="/afi910_cloud_node/cloud" />
     <!-- radar dataset type: vod, afi910, custom -->
     <arg name="radar_dataset_type" default="afi910" />
+    <!-- radar_4_vox_map_type: 3d, 2d -->
+    <arg name="radar_4_vox_map_type" default="3d" />
     <arg name="algorithm_ini_path" default="config/radar_4_vox_map/radar_4_vox_map_config.ini" />
     <arg name="world_frame_id" default="world" />
     <arg name="base_link_frame_id" default="base_link" />
@@ -18,6 +20,7 @@
     <node pkg="radar_4_vox_map" type="radar_4_vox_map_ros" name="radar_4_vox_map" output="screen">
         <param name="radar_topic" value="$(arg input_radar_topic)" />
         <param name="radar_dataset_type" value="$(arg radar_dataset_type)" />
+        <param name="radar_4_vox_map_type" value="$(arg radar_4_vox_map_type)" />
         <param name="algorithm_ini_path" value="$(arg algorithm_ini_path)" />
         <param name="world_frame_id" value="$(arg world_frame_id)" />
         <param name="base_link_frame_id" value="$(arg base_link_frame_id)" />

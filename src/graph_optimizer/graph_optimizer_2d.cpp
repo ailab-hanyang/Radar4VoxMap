@@ -1,10 +1,10 @@
 // #include <stdio.h>
-#include "graph_optimizer/graph_optimizer.hpp"
+#include "graph_optimizer/graph_optimizer_2d.hpp"
 
-GraphOptimizer::GraphOptimizer() {};
-GraphOptimizer::~GraphOptimizer() {};
+GraphOptimizer2D::GraphOptimizer2D() {};
+GraphOptimizer2D::~GraphOptimizer2D() {};
 
-void GraphOptimizer::Init(VoxelRcsMapperConfig config) {
+void GraphOptimizer2D::Init(VoxelRcsMapperConfig config) {
     std::cout << "[GraphOptimizer] Init" << std::endl;
     m_config = config;
 
@@ -28,7 +28,7 @@ void GraphOptimizer::Init(VoxelRcsMapperConfig config) {
     // Initialize algorithm
     g2o::OptimizationAlgorithm* algorithm;
 
-    if ( m_config.optimization_algorithm_type == OptimizationAlgorithmType::GaussNewton ) {
+    if ( m_config.optimization_algorithm_type == OptimizationAlgorithmType2D::GaussNewton2D ) {
         g2o::OptimizationAlgorithmGaussNewton* algorithm_gauss_newton = new g2o::OptimizationAlgorithmGaussNewton(std::move(block_solver));
         algorithm                                                     = dynamic_cast<g2o::OptimizationAlgorithm*>(algorithm_gauss_newton);
     }
@@ -54,33 +54,33 @@ void GraphOptimizer::Init(VoxelRcsMapperConfig config) {
 }
 
 // add new frame to graph with initial value from CV prediction
-void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const double i_radar_timestamp_sec) {
+void GraphOptimizer2D::AddNewFrame(const std::vector<RadarPoint>& frame, const double i_radar_timestamp_sec) {
     // std::cout << "[GraphOptimizer] AddNewFrame" << std::endl;
     // 0. 직전 vertex 로드
-    Eigen::Matrix4d last_pose = Eigen::Matrix4d::Identity();
+    Eigen::Matrix3d last_pose = Eigen::Matrix3d::Identity();
 
     // check if the current frame is the first vertex
     bool        b_is_new_vertex = m_p_g2o_optimizer->vertices().empty();
-    VertexType* last_vertex;
+    VertexType2D* last_vertex;
 
     // the current frame is not the first vertex
     if ( b_is_new_vertex == false ) {
-        last_vertex = dynamic_cast<VertexType*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
+        last_vertex = dynamic_cast<VertexType2D*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
 
         if ( last_vertex != nullptr ) {
-            last_pose = last_vertex->estimateIso3().matrix();
+            last_pose = last_vertex->estimateIso2().matrix();
             // std::cout << "[GraphOptimizer] AddNewFrame: Last vertex exist" << std::endl;
         }
     }
 
     // 2. calculate initial position from CV prediction
-    Eigen::Matrix4d cv_prediction = Eigen::Matrix4d::Identity();
+    Eigen::Matrix3d cv_prediction = Eigen::Matrix3d::Identity();
     // there must be at least 2 vertices to perform CV prediction
     if ( m_p_g2o_optimizer->vertices().size() >= 2 ) {
         // std::cout<<"[GraphOptimizer] AddNewFrame: Make CV Prediction"<<std::endl;
 
-        VertexType* n_1_vertex = dynamic_cast<VertexType*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
-        VertexType* n_2_vertex = dynamic_cast<VertexType*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex() - 1));
+        VertexType2D* n_1_vertex = dynamic_cast<VertexType2D*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
+        VertexType2D* n_2_vertex = dynamic_cast<VertexType2D*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex() - 1));
 
         if ( n_1_vertex != nullptr && n_2_vertex != nullptr ) {
             // std::cout<<"[GraphOptimizer] AddNewFrame: Valid last 2 vertex"<<std::endl;
@@ -94,10 +94,10 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
         // std::cout << "[GraphOptimizer] AddNewFrame: Invalid last 2 vertex" << std::endl;
     }
 
-    Eigen::Matrix4d initial_guess = last_pose * cv_prediction; // CV prediction result in global frame
+    Eigen::Matrix3d initial_guess = last_pose * cv_prediction; // CV prediction result in global frame
 
     // 3. add new vertex with initial position from CV prediction
-    VertexType* new_vertex = new VertexType();
+    VertexType2D* new_vertex = new VertexType2D();
     new_vertex->setId(GetNewNodeIndex());
 
     std::vector<SRadarPoint> converted_frame = ConvertRadarPointsToSRadarPoints(frame, GetCurNodeIndex());
@@ -110,18 +110,18 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
 
     new_vertex->timestamp = i_radar_timestamp_sec;
     new_vertex->points    = cropped_frame;
-    new_vertex->setEstimate(Eigen::Isometry3d(initial_guess));
+    new_vertex->setEstimate(Eigen::Isometry2d(initial_guess));
     // Estimate velocity and angular velocity
     if (b_is_new_vertex == false) {
         double delta_time = i_radar_timestamp_sec - last_vertex->timestamp;
-        Eigen::Vector3d delta_translation = cv_prediction.block<3, 1>(0, 3);
-        Eigen::AngleAxisd angle_axis(cv_prediction.block<3,3>(0,0));
-        Eigen::Vector3d delta_rotation = angle_axis.angle() * angle_axis.axis();
-        Eigen::Vector3d delta_velocity = delta_translation / delta_time;
-        Eigen::Vector3d delta_angular_velocity = delta_rotation / delta_time;
-        g2o::VectorN<PV_STATE_SIZE> estimated_state = new_vertex->estimateVec();
-        estimated_state.block<3, 1>(IDX_VX, 0) = delta_velocity;
-        estimated_state.block<3, 1>(IDX_WX, 0) = delta_angular_velocity;
+        Eigen::Vector2d delta_translation = cv_prediction.block<2, 1>(0, 2);
+        Eigen::Matrix2d delta_rotation = cv_prediction.block<2,2>(0, 0);
+        Eigen::Vector2d delta_velocity = delta_translation / delta_time;
+        double delta_angular_velocity = atan2(delta_rotation(1, 0), delta_rotation(0, 0));
+        g2o::VectorN<PV2_STATE_SIZE> estimated_state = new_vertex->estimateVec();
+        estimated_state[IDX2_VX] = delta_velocity(0);
+        estimated_state[IDX2_VY] = delta_velocity(1);
+        estimated_state[IDX2_VYAW] = delta_angular_velocity;
         new_vertex->setEstimate(estimated_state);
     }
 
@@ -129,18 +129,15 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
     m_p_g2o_optimizer->addVertex(new_vertex);
 
     // add DICP Unary Edge. Measurement is performed in RunIcpAll
-    EdgeUnaryICPType* edge_unary_icp = new EdgeUnaryICPType();
+    EdgeUnaryICPType2D* edge_unary_icp = new EdgeUnaryICPType2D();
     edge_unary_icp->setId(GetNewEdgeIndex()); // set unique ID
     edge_unary_icp->setVertex(0, new_vertex); // connect unary edge to the vertex
     edge_unary_icp->setParameterId(0, 0);
 
-    Eigen::Matrix<double, 6, 6> prior_information = Eigen::Matrix<double, 6, 6>::Identity();
+    Eigen::Matrix<double, 3, 3> prior_information = Eigen::Matrix<double, 3, 3>::Identity();
     prior_information(0, 0)                       = 1.0 / (m_config.edge_unary_dicp_std[0] * m_config.edge_unary_dicp_std[0]);
     prior_information(1, 1)                       = 1.0 / (m_config.edge_unary_dicp_std[1] * m_config.edge_unary_dicp_std[1]);
-    prior_information(2, 2)                       = 1.0 / (m_config.edge_unary_dicp_std[2] * m_config.edge_unary_dicp_std[2]);
-    prior_information(3, 3)                       = 1.0 / (m_config.edge_unary_dicp_std[3] * m_config.edge_unary_dicp_std[3]);
-    prior_information(4, 4)                       = 1.0 / (m_config.edge_unary_dicp_std[4] * m_config.edge_unary_dicp_std[4]);
-    prior_information(5, 5)                       = 1.0 / (m_config.edge_unary_dicp_std[5] * m_config.edge_unary_dicp_std[5]);
+    prior_information(2, 2)                       = 1.0 / (m_config.edge_unary_dicp_std[5] * m_config.edge_unary_dicp_std[5]);
     edge_unary_icp->setInformation(prior_information);
     // Robust Kernel
     edge_unary_icp->setRobustKernel(new g2o::RobustKernelHuber());
@@ -148,16 +145,16 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
     m_p_g2o_optimizer->addEdge(edge_unary_icp);
 
     // Doppler Unary Edge
-    if ( m_config.use_doppler_unary_edge == true  && b_is_new_vertex == false) {
+    if ( m_config.use_doppler_unary_edge == true && b_is_new_vertex == false) {
         // Doppler Unary Edge processing time measurement
         auto doppler_start = std::chrono::high_resolution_clock::now();
         
         // Get velocity from the last vertex
-        std::vector<double> last_velocity = {last_vertex->estimateVec()[IDX_VX], last_vertex->estimateVec()[IDX_VY], last_vertex->estimateVec()[IDX_VZ]};
-        std::vector<SRadarPoint> static_points = EdgeUnaryDopplerType::ExtractStaticPoints(converted_frame, last_velocity);
+        Eigen::Vector2d last_velocity = {last_vertex->estimateVec()[IDX2_VX], last_vertex->estimateVec()[IDX2_VY]};
+        std::vector<SRadarPoint> static_points = EdgeUnaryDopplerType2D::ExtractStaticPoints(converted_frame, last_velocity);
 
         // Velocity based static point extractioni
-        EdgeUnaryDopplerType* edge_unary_doppler = new EdgeUnaryDopplerType();
+        EdgeUnaryDopplerType2D* edge_unary_doppler = new EdgeUnaryDopplerType2D();
         edge_unary_doppler->setId(GetNewEdgeIndex());
         edge_unary_doppler->setVertex(0, new_vertex);
         edge_unary_doppler->setParameterId(0, 0);
@@ -174,14 +171,14 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
     if ( m_p_g2o_optimizer->vertices().size() >= 2 ) {
         // std::cout<<"[GraphOptimizer] AddNewFrame: Add CV Prediction Edge"<<std::endl;
 
-        EdgeBinaryPredictionType* edge_prediction_new = new EdgeBinaryPredictionType();
+        EdgeBinaryPredictionType2D* edge_prediction_new = new EdgeBinaryPredictionType2D();
         edge_prediction_new->setId(GetNewEdgeIndex());
         edge_prediction_new->setVertex(0, last_vertex);
         edge_prediction_new->setVertex(1, new_vertex);
         edge_prediction_new->setParameterId(0, 0);
 
-        edge_prediction_new->setMeasurement(Eigen::Isometry3d(cv_prediction));
-        std::vector<double> information(PV_STATE_SIZE);
+        edge_prediction_new->setMeasurement(Eigen::Isometry2d(cv_prediction));
+        std::vector<double> information(12);
         information[0]  = 1.0 / (m_config.edge_binary_cv_std[0] * m_config.edge_binary_cv_std[0]);   // x
         information[1]  = 1.0 / (m_config.edge_binary_cv_std[1] * m_config.edge_binary_cv_std[1]);   // y
         information[2]  = 1.0 / (m_config.edge_binary_cv_std[2] * m_config.edge_binary_cv_std[2]);   // z
@@ -206,21 +203,11 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
         Eigen::Matrix3d velocity_covariance;
         bool b_success = estimateLocalVelocityFromPoints(new_vertex->points, estimated_velocity, velocity_covariance);
         if ( b_success ) {
-            g2o::VectorN<PV_STATE_SIZE> estimated_state = new_vertex->estimateVec();
-            estimated_state.block<3, 1>(IDX_VX, 0) = estimated_velocity;
+            g2o::VectorN<PV2_STATE_SIZE> estimated_state = new_vertex->estimateVec();
+            estimated_state.block<2, 1>(IDX2_VX, 0) = estimated_velocity.block<2, 1>(0, 0);
             new_vertex->setEstimate(estimated_state);
         }
         new_vertex->setFixed(true);
-    }
-
-    // Add Gravity Align Edge for visualization. so loosly fixed
-    if ( m_config.virtual_gravity_align == true ) {
-        EdgeUnaryGravityAlignType* edge_gravity_align = new EdgeUnaryGravityAlignType();
-        edge_gravity_align->setId(GetNewEdgeIndex());
-        edge_gravity_align->setVertex(0, new_vertex);
-        edge_gravity_align->setParameterId(0, 0);
-        edge_gravity_align->setInformation(m_config.virtual_gravity_align_information);
-        m_p_g2o_optimizer->addEdge(edge_gravity_align);
     }
 
     return;
@@ -232,7 +219,7 @@ void GraphOptimizer::AddNewFrame(const std::vector<RadarPoint>& frame, const dou
     2. Perform registration
     3. Add Doppler Unary Edge (initial execution)
 */
-void GraphOptimizer::RunIcpAll() {
+void GraphOptimizer2D::RunIcpAll() {
     // std::cout << "[GraphOptimizer] RunIcpAll for " << m_p_g2o_optimizer->vertices().size() << " vertex" << std::endl;
 
     bool b_is_new_vertex = m_p_g2o_optimizer->vertices().empty();
@@ -248,7 +235,7 @@ void GraphOptimizer::RunIcpAll() {
     auto                                    elapsed_ns = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     // std::cout << "[GraphOptimizer] RunIcpAll: Sort vertices executed in " << (elapsed_ns / 1000.0) << " ms" << std::endl;
 
-    // Iterate through EdgeUnaryICPType edges in the graph and perform ICP
+    // Iterate through EdgeUnaryICPType2D edges in the graph and perform ICP
     // Depending on the configuration, ICP may only be performed on the most recent vertex
     auto latest_vertex = sortedVertices.rbegin()->second;
     if ( latest_vertex == nullptr ) {
@@ -258,8 +245,8 @@ void GraphOptimizer::RunIcpAll() {
 
     // Search all edges in the graph
     for ( auto iter_edge = m_p_g2o_optimizer->edges().begin(); iter_edge != m_p_g2o_optimizer->edges().end(); ++iter_edge ) {
-        auto edge_unary_icp = dynamic_cast<EdgeUnaryICPType*>(*iter_edge);
-        // Only process EdgeUnaryICPType edges
+        auto edge_unary_icp = dynamic_cast<EdgeUnaryICPType2D*>(*iter_edge);
+        // Only process EdgeUnaryICPType2D edges
         if ( edge_unary_icp != nullptr ) {
             // If icp_all_node option is disabled, only process the latest node
             if ( m_config.icp_all_node == false && edge_unary_icp->vertex(0)->id() != GetCurNodeIndex() ) {
@@ -267,7 +254,7 @@ void GraphOptimizer::RunIcpAll() {
             }
             // Find the vertex connected to this unary ICP edge
             int         iter_vertex_id = edge_unary_icp->vertex(0)->id();
-            VertexType* iter_vertex    = dynamic_cast<VertexType*>(sortedVertices.find(iter_vertex_id)->second);
+            VertexType2D* iter_vertex    = dynamic_cast<VertexType2D*>(sortedVertices.find(iter_vertex_id)->second);
             if ( iter_vertex == nullptr ) {
                 std::cout << "[GraphOptimizer] RunIcpAll: CANNOT find iter vertex" << std::endl;
                 continue; // Prevent errors
@@ -280,7 +267,7 @@ void GraphOptimizer::RunIcpAll() {
 
             // Extract initial guess from the current vertex's estimated value
             // When optimization is disabled:
-            Eigen::Matrix4d initial_guess = iter_vertex->estimateIso3().matrix();
+            Eigen::Isometry2d initial_guess = iter_vertex->estimateIso2();
 
             // Find the previous vertex
             auto prev_vertex_iter = sortedVertices.find(iter_vertex_id - 1);
@@ -289,12 +276,12 @@ void GraphOptimizer::RunIcpAll() {
                 // No previous vertex, so this must be the first vertex. No need for ICP
                 continue; 
             }
-            auto prev_vertex = dynamic_cast<VertexType*>(prev_vertex_iter->second);
+            auto prev_vertex = dynamic_cast<VertexType2D*>(prev_vertex_iter->second);
             if ( prev_vertex == nullptr ) { // If no previous vertex, this is the first vertex in the graph. Skip ICP
                 std::cout << "[GraphOptimizer] RunIcpAll: DO NOT RUN FOR first vertex" << std::endl;
                 continue;
             }
-            Eigen::Matrix4d last_pose = prev_vertex->estimateIso3().matrix();
+            Eigen::Isometry2d last_pose = prev_vertex->estimateIso2();
 
             double dt          = iter_vertex->timestamp - prev_vertex->timestamp;
             double trans_sigma = m_config.initial_trans_threshold;
@@ -307,7 +294,7 @@ void GraphOptimizer::RunIcpAll() {
 
             start = std::chrono::steady_clock::now();
             std::vector<SRadarPoint> frame_processed;
-            Eigen::Matrix4d          new_pose = edge_unary_icp->RunRegister(iter_vertex->points, frame_processed, m_voxel_hash_map,
+            Eigen::Isometry2d          new_pose = edge_unary_icp->RunRegister(iter_vertex->points, frame_processed, m_voxel_hash_map,
                                                                             initial_guess, last_pose, dt, trans_sigma, vel_sigma, m_config);
 
             end        = std::chrono::steady_clock::now();
@@ -318,17 +305,17 @@ void GraphOptimizer::RunIcpAll() {
             iter_vertex->points = frame_processed;
 
             // Set the measurement for the DICP unary edge
-            edge_unary_icp->setMeasurement(Eigen::Isometry3d(new_pose));
+            edge_unary_icp->setMeasurement(new_pose);
 
             // If optimization is disabled, directly apply registration results to the node
             // TODO: Add direct velocity input to Prediction
             if ( m_config.run_optimization == false ) {
-                iter_vertex->setEstimate(Eigen::Isometry3d(new_pose));
+                iter_vertex->setEstimate(new_pose);
             }
 
             // Create Doppler Unary Edge for the latest vertex on first execution
             if ( iter_vertex->id() == GetCurNodeIndex() && m_config.use_doppler_unary_edge == true ) {
-                EdgeUnaryDopplerType* edge_unary_doppler = new EdgeUnaryDopplerType();
+                EdgeUnaryDopplerType2D* edge_unary_doppler = new EdgeUnaryDopplerType2D();
                 // Calculate measurement and information in one step
                 if ( edge_unary_doppler->setPointMeasurementAndInformation(frame_processed) == true ) {
                     edge_unary_doppler->setId(GetNewEdgeIndex());
@@ -342,7 +329,7 @@ void GraphOptimizer::RunIcpAll() {
     }
 }
 
-void GraphOptimizer::RunOptimization() {
+void GraphOptimizer2D::RunOptimization() {
     // std::cout << "[GraphOptimizer] RunOptimization" << std::endl;
     if ( m_config.run_optimization == false ) {
         std::cout << "[GraphOptimizer] Option. No Optimization" << std::endl;
@@ -362,7 +349,7 @@ void GraphOptimizer::RunOptimization() {
     return;
 }
 
-void GraphOptimizer::UpdateGraph() {
+void GraphOptimizer2D::UpdateGraph() {
     // std::cout << "[GraphOptimizer] UpdateGraph" << std::endl;
 
     if ( m_p_g2o_optimizer->vertices().empty() == true ) {
@@ -375,7 +362,7 @@ void GraphOptimizer::UpdateGraph() {
 
     // Use reverse iterator to search from highest ID
     auto lastest_vertex_iter = sortedVertices.rbegin();
-    auto latest_vertex       = dynamic_cast<VertexType*>(lastest_vertex_iter->second);
+    auto latest_vertex       = dynamic_cast<VertexType2D*>(lastest_vertex_iter->second);
 
     if ( latest_vertex == nullptr ) {
         // std::cout << "[GraphOptimizer] UpdateGraph: last vertex invalid!" << std::endl;
@@ -383,7 +370,7 @@ void GraphOptimizer::UpdateGraph() {
     }
 
     // Position of the last vertex
-    Eigen::Vector3d lateset_position = latest_vertex->estimateIso3().translation();
+    Eigen::Vector2d lateset_position = latest_vertex->estimateIso2().translation();
 
     // If there is only one vertex, fix it and return (first vertex fixed)
     if ( m_p_g2o_optimizer->vertices().size() == 1 ) {
@@ -394,14 +381,14 @@ void GraphOptimizer::UpdateGraph() {
     int last_deleted_index = -1;
     int i_node_count       = 0;
     for ( auto it = sortedVertices.rbegin(); it != sortedVertices.rend(); ++it ) {
-        auto iter_vertex = dynamic_cast<VertexType*>(it->second);
+        auto iter_vertex = dynamic_cast<VertexType2D*>(it->second);
         if ( iter_vertex == nullptr ) {
             continue;
         }
         i_node_count++;
 
         // Position of the current vertex
-        Eigen::Vector3d iter_position = iter_vertex->estimateIso3().translation();
+        Eigen::Vector2d iter_position = iter_vertex->estimateIso2().translation();
 
         // Calculate the distance between the last vertex and the current vertex
         double distance = (iter_position - lateset_position).norm();
@@ -427,7 +414,7 @@ void GraphOptimizer::UpdateGraph() {
     }
     // Traverse from the deleted vertex index to the latest (highest ID)
     for ( auto it = sortedVertices.upper_bound(last_deleted_index); it != sortedVertices.end(); ++it ) {
-        auto it_vertex = dynamic_cast<VertexType*>(it->second);
+        auto it_vertex = dynamic_cast<VertexType2D*>(it->second);
 
         // If the vertex exists
         if ( it_vertex != nullptr ) {
@@ -441,7 +428,7 @@ void GraphOptimizer::UpdateGraph() {
     }
 }
 
-void GraphOptimizer::UpdateVoxelMap() {
+void GraphOptimizer2D::UpdateVoxelMap() {
     // std::cout << "[GraphOptimizer] UpdateVoxelMap" << std::endl;
 
     // voxel map 초기화
@@ -453,13 +440,13 @@ void GraphOptimizer::UpdateVoxelMap() {
 
     // Add points to the voxel map for all vertices
     start                                  = std::chrono::steady_clock::now();
-    Eigen::Vector3d last_keyframe_position = Eigen::Vector3d::Zero();
+    Eigen::Vector2d last_keyframe_position = Eigen::Vector2d::Zero();
     for ( const auto& v_pair : m_p_g2o_optimizer->vertices() ) {
-        auto iter_vertex = dynamic_cast<VertexType*>(v_pair.second);
+        auto iter_vertex = dynamic_cast<VertexType2D*>(v_pair.second);
         // Check if the vertex is valid
         if ( iter_vertex ) {
-            auto cur_position = iter_vertex->estimateIso3();
-            double distance    = (cur_position.translation() - last_keyframe_position).norm();
+            auto cur_position = iter_vertex->estimateIso2();
+            double distance    = (cur_position.translation().head<2>() - last_keyframe_position.head<2>()).norm();
             bool   is_keyframe = false;
             if ( iter_vertex->fixed() == false ) {
                 is_keyframe = true;
@@ -468,7 +455,7 @@ void GraphOptimizer::UpdateVoxelMap() {
                 is_keyframe = true;
             }
             if ( is_keyframe == true ) {
-                m_voxel_hash_map.Update(iter_vertex->points, cur_position.matrix());
+                m_voxel_hash_map.Update(iter_vertex->points, cur_position);
                 last_keyframe_position = cur_position.translation();
             }
         }
@@ -491,7 +478,7 @@ void GraphOptimizer::UpdateVoxelMap() {
     // std::cout << "[Radar4VoxMap] UpdateVoxelMap  CalCov executed in " << (elapsed_ns / 1000.0) << " ms" << std::endl;
 }
 
-GraphOptimizer::PairAlgoResultTuple GraphOptimizer::GetLastVertexInfo() {
+GraphOptimizer2D::PairAlgoResultTuple GraphOptimizer2D::GetLastVertexInfo() {
     AlgoResultTuple latest_node = std::make_tuple(std::vector<SRadarPoint>(), Eigen::Matrix4d::Identity(), 0.0);
     AlgoResultTuple oldest_node = std::make_tuple(std::vector<SRadarPoint>(), Eigen::Matrix4d::Identity(), 0.0);
 
@@ -504,47 +491,57 @@ GraphOptimizer::PairAlgoResultTuple GraphOptimizer::GetLastVertexInfo() {
         // std::cout << "[GraphOptimizer] GetLastVertexInfo: Last vertex id: " << GetCurNodeIndex() << std::endl;
     }
 
-    VertexType* lastest_vertex = dynamic_cast<VertexType*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
+    VertexType2D* lastest_vertex = dynamic_cast<VertexType2D*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
     if ( lastest_vertex == nullptr ) {
-        // std::cout << "[GraphOptimizer] GetLastVertexInfo: Fail to cast VertexType. Return empty" << std::endl;
+        // std::cout << "[GraphOptimizer] GetLastVertexInfo: Fail to cast VertexType2D. Return empty" << std::endl;
         return std::make_pair(latest_node, oldest_node);
     }
-    latest_node = std::make_tuple(lastest_vertex->points, lastest_vertex->estimateIso3().matrix(), lastest_vertex->timestamp);
+    Eigen::Matrix4d pose_matrix = Eigen::Matrix4d::Identity();
+    Eigen::Matrix2d rotation_matrix = lastest_vertex->estimateIso2().rotation();
+    Eigen::Vector2d translation_vector = lastest_vertex->estimateIso2().translation();
+    pose_matrix.block<2, 2>(0, 0) = rotation_matrix;
+    pose_matrix.block<2, 1>(0, 3) = translation_vector;
+    latest_node = std::make_tuple(lastest_vertex->points, pose_matrix, lastest_vertex->timestamp);
 
     // Search all vertices in the graph to find the smallest ID
     int         min_id        = std::numeric_limits<int>::max();
-    VertexType* oldest_vertex = nullptr;
+    VertexType2D* oldest_vertex = nullptr;
 
     for ( const auto& v_pair : m_p_g2o_optimizer->vertices() ) {
-        auto vertex = dynamic_cast<VertexType*>(v_pair.second);
+        auto vertex = dynamic_cast<VertexType2D*>(v_pair.second);
         if ( vertex != nullptr && v_pair.first < min_id && vertex->fixed() == false ) {
             min_id        = v_pair.first;
             oldest_vertex = vertex;
         }
     }
     if ( oldest_vertex != nullptr ) {
-        oldest_node = std::make_tuple(oldest_vertex->points, oldest_vertex->estimateIso3().matrix(), oldest_vertex->timestamp);
+        Eigen::Matrix4d pose_matrix = Eigen::Matrix4d::Identity();
+        Eigen::Matrix2d rotation_matrix = oldest_vertex->estimateIso2().rotation();
+        Eigen::Vector2d translation_vector = oldest_vertex->estimateIso2().translation();
+        pose_matrix.block<2, 2>(0, 0) = rotation_matrix;
+        pose_matrix.block<2, 1>(0, 3) = translation_vector;
+        oldest_node = std::make_tuple(oldest_vertex->points, pose_matrix, oldest_vertex->timestamp);
     }
 
     return std::make_pair(latest_node, oldest_node);
 }
 
-std::pair<std::vector<double>, std::vector<double>> GraphOptimizer::GetMotion() {
+std::pair<std::vector<double>, std::vector<double>> GraphOptimizer2D::GetMotion() {
     if ( m_p_g2o_optimizer->vertices().empty() == true ) {
         return std::make_pair(std::vector<double>(6, 0.0), std::vector<double>(6, 0.0));
     }
 
     // Get the last vertex
-    VertexType* lastest_vertex = dynamic_cast<VertexType*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
+    VertexType2D* lastest_vertex = dynamic_cast<VertexType2D*>(m_p_g2o_optimizer->vertex(GetCurNodeIndex()));
     if ( lastest_vertex == nullptr ) {
         return std::make_pair(std::vector<double>(6, 0.0), std::vector<double>(6, 0.0));
     }
 
     // Get the oldest vertex
     int         min_id        = std::numeric_limits<int>::max();
-    VertexType* oldest_vertex = nullptr;
+    VertexType2D* oldest_vertex = nullptr;
     for ( const auto& v_pair : m_p_g2o_optimizer->vertices() ) {
-        auto vertex = dynamic_cast<VertexType*>(v_pair.second);
+        auto vertex = dynamic_cast<VertexType2D*>(v_pair.second);
         if ( vertex != nullptr && v_pair.first < min_id && vertex->fixed() == false ) {
             min_id        = v_pair.first;
             oldest_vertex = vertex;
@@ -555,40 +552,37 @@ std::pair<std::vector<double>, std::vector<double>> GraphOptimizer::GetMotion() 
     }
 
     // Get motion
-    g2o::VectorN<PV_STATE_SIZE> last_vertex_estimate_vec = lastest_vertex->estimateVec();
-    g2o::VectorN<PV_STATE_SIZE> oldest_vertex_estimate_vec = oldest_vertex->estimateVec();
+    g2o::VectorN<PV2_STATE_SIZE> last_vertex_estimate_vec = lastest_vertex->estimateVec();
+    g2o::VectorN<PV2_STATE_SIZE> oldest_vertex_estimate_vec = oldest_vertex->estimateVec();
 
     std::vector<double> last_vertex_motion = std::vector<double>(6, 0.0);
     std::vector<double> oldest_vertex_motion = std::vector<double>(6, 0.0);
 
-    last_vertex_motion[0] = last_vertex_estimate_vec[IDX_VX];
-    last_vertex_motion[1] = last_vertex_estimate_vec[IDX_VY];
-    last_vertex_motion[2] = last_vertex_estimate_vec[IDX_VZ];
-    last_vertex_motion[3] = last_vertex_estimate_vec[IDX_WX];
-    last_vertex_motion[4] = last_vertex_estimate_vec[IDX_WY];
-    last_vertex_motion[5] = last_vertex_estimate_vec[IDX_WZ];
+    last_vertex_motion[0] = last_vertex_estimate_vec[IDX2_VX];
+    last_vertex_motion[1] = last_vertex_estimate_vec[IDX2_VY];
+    last_vertex_motion[5] = last_vertex_estimate_vec[IDX2_VYAW];
     
-    oldest_vertex_motion[0] = oldest_vertex_estimate_vec[IDX_VX];
-    oldest_vertex_motion[1] = oldest_vertex_estimate_vec[IDX_VY];
-    oldest_vertex_motion[2] = oldest_vertex_estimate_vec[IDX_VZ];
-    oldest_vertex_motion[3] = oldest_vertex_estimate_vec[IDX_WX];
-    oldest_vertex_motion[4] = oldest_vertex_estimate_vec[IDX_WY];
-    oldest_vertex_motion[5] = oldest_vertex_estimate_vec[IDX_WZ];
+    oldest_vertex_motion[0] = oldest_vertex_estimate_vec[IDX2_VX];
+    oldest_vertex_motion[1] = oldest_vertex_estimate_vec[IDX2_VY];
+    oldest_vertex_motion[5] = oldest_vertex_estimate_vec[IDX2_VYAW];
 
     return std::make_pair(last_vertex_motion, oldest_vertex_motion);
 }
 
-std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>, std::vector<SVisEdgeUnary>> GraphOptimizer::GetAllGraphElements() const {
+std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>, std::vector<SVisEdgeUnary>> GraphOptimizer2D::GetAllGraphElements() const {
     std::vector<SVisVertex>     o_vec_vertex;
     std::vector<SVisEdgeBinary> o_vec_binary_edge;
     std::vector<SVisEdgeUnary>  o_vec_unary_edge;
 
     // Traverse all vertices to convert to SVisVertex
     for ( const auto& v_pair : m_p_g2o_optimizer->vertices() ) {
-        auto vertex = dynamic_cast<VertexType*>(v_pair.second);
+        auto vertex = dynamic_cast<VertexType2D*>(v_pair.second);
         if ( vertex ) {
             SVisVertex vis_vertex;
-            vis_vertex.pose = vertex->estimateIso3().matrix();
+            Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+            pose.linear().block<2, 2>(0, 0) = vertex->estimateIso2().rotation();
+            pose.translation().head<2>() = vertex->estimateIso2().translation();
+            vis_vertex.pose = pose.matrix();
             vis_vertex.covariance = Eigen::Matrix<double, 6, 6>::Identity(); // TODO: Calculate covariance
             vis_vertex.id         = vertex->id();
             o_vec_vertex.push_back(vis_vertex);
@@ -597,14 +591,25 @@ std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>, std::vector<SVi
 
     // Traverse all edges to convert to SVisEdgeBinary and SVisEdgeUnary
     for ( const auto& e : m_p_g2o_optimizer->edges() ) {
-        if ( auto edge_binary = dynamic_cast<EdgeBinaryPredictionType*>(e) ) {
+        if ( auto edge_binary = dynamic_cast<EdgeBinaryPredictionType2D*>(e) ) {
             SVisEdgeBinary vis_edge_binary;
-            auto           v_start = dynamic_cast<VertexType*>(edge_binary->vertex(0));
-            auto           v_end   = dynamic_cast<VertexType*>(edge_binary->vertex(1));
+            auto           v_start = dynamic_cast<VertexType2D*>(edge_binary->vertex(0));
+            auto           v_end   = dynamic_cast<VertexType2D*>(edge_binary->vertex(1));
             if ( v_start && v_end ) {
-                vis_edge_binary.vertex_pose_start = v_start->estimateIso3().matrix();
-                vis_edge_binary.vertex_pose_end   = v_end->estimateIso3().matrix();
-                vis_edge_binary.measurement = edge_binary->measurement().matrix();
+                Eigen::Isometry3d pose_start = Eigen::Isometry3d::Identity();
+                pose_start.linear().block<2, 2>(0, 0) = v_start->estimateIso2().rotation();
+                pose_start.translation().head<2>() = v_start->estimateIso2().translation();
+                vis_edge_binary.vertex_pose_start = pose_start.matrix();
+
+                Eigen::Isometry3d pose_end = Eigen::Isometry3d::Identity();
+                pose_end.linear().block<2, 2>(0, 0) = v_end->estimateIso2().rotation();
+                pose_end.translation().head<2>() = v_end->estimateIso2().translation();
+                vis_edge_binary.vertex_pose_end   = pose_end.matrix();
+
+                Eigen::Matrix4d measurement_matrix = Eigen::Matrix4d::Identity();   
+                measurement_matrix.block<2, 2>(0, 0) = edge_binary->measurement().rotation();
+                measurement_matrix.block<2, 1>(0, 3) = edge_binary->measurement().translation();
+                vis_edge_binary.measurement = measurement_matrix;
                 vis_edge_binary.information = edge_binary->informationM6();
                 vis_edge_binary.id       = edge_binary->id();
                 vis_edge_binary.id_start = v_start->id();
@@ -612,13 +617,22 @@ std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>, std::vector<SVi
                 o_vec_binary_edge.push_back(vis_edge_binary);
             }
         }
-        else if ( auto edge_unary = dynamic_cast<EdgeUnaryICPType*>(e) ) {
+        else if ( auto edge_unary = dynamic_cast<EdgeUnaryICPType2D*>(e) ) {
             SVisEdgeUnary vis_edge_unary;
-            auto          v_start = dynamic_cast<VertexType*>(edge_unary->vertex(0));
+            auto          v_start = dynamic_cast<VertexType2D*>(edge_unary->vertex(0));
             if ( v_start ) {
-                vis_edge_unary.vertex_pose = v_start->estimateIso3().matrix();
-                vis_edge_unary.measurement = edge_unary->measurement().matrix();
-                vis_edge_unary.information = edge_unary->information();
+                Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+                pose.linear().block<2, 2>(0, 0) = v_start->estimateIso2().rotation();
+                pose.translation().head<2>() = v_start->estimateIso2().translation();
+                vis_edge_unary.vertex_pose = pose.matrix();
+                Eigen::Matrix4d measurement_matrix = Eigen::Matrix4d::Identity();   
+                measurement_matrix.block<2, 2>(0, 0) = edge_unary->measurement().rotation();
+                measurement_matrix.block<2, 1>(0, 3) = edge_unary->measurement().translation();
+                vis_edge_unary.measurement = measurement_matrix;
+                Eigen::Matrix6d information_matrix = Eigen::Matrix6d::Identity();
+                information_matrix.block<2, 2>(0, 0) = edge_unary->information().block<2, 2>(0, 0);
+                information_matrix.block<1, 1>(3, 3) = edge_unary->information().block<1, 1>(2, 2);
+                vis_edge_unary.information = information_matrix;
                 vis_edge_unary.id          = edge_unary->id();
                 vis_edge_unary.id_start    = v_start->id();
                 o_vec_unary_edge.push_back(vis_edge_unary);
@@ -629,17 +643,20 @@ std::tuple<std::vector<SVisVertex>, std::vector<SVisEdgeBinary>, std::vector<SVi
     return std::make_tuple(o_vec_vertex, o_vec_binary_edge, o_vec_unary_edge);
 }
 
-std::vector<SVisEdgeUnaryDoppler> GraphOptimizer::GetVertexDopplerVel() const {
+std::vector<SVisEdgeUnaryDoppler> GraphOptimizer2D::GetVertexDopplerVel() const {
     std::vector<SVisEdgeUnaryDoppler> o_vec_unary_edge_doppler;
     // Traverse all edges to convert to SVisEdgeUnaryDoppler
     for ( const auto& e : m_p_g2o_optimizer->edges() ) {
-        if ( auto edge_unary = dynamic_cast<EdgeUnaryDopplerType*>(e) ) {
+        if ( auto edge_unary = dynamic_cast<EdgeUnaryDopplerType2D*>(e) ) {
             SVisEdgeUnaryDoppler vis_edge_unary;
-            auto                 v_start = dynamic_cast<VertexType*>(edge_unary->vertex(0));
+            auto                 v_start = dynamic_cast<VertexType2D*>(edge_unary->vertex(0));
             if ( v_start ) {
-                vis_edge_unary.vertex_pose = v_start->estimateIso3().matrix();
-                vis_edge_unary.velocity    = edge_unary->measurement().matrix();
-                vis_edge_unary.information = edge_unary->information();
+                Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+                pose.linear().block<2, 2>(0, 0) = v_start->estimateIso2().rotation();
+                pose.translation().head<2>() = v_start->estimateIso2().translation();
+                vis_edge_unary.vertex_pose = pose.matrix();
+                vis_edge_unary.velocity.head<2>() = edge_unary->measurement();
+                // vis_edge_unary.information = edge_unary->information();
                 vis_edge_unary.id          = edge_unary->id();
                 vis_edge_unary.id_start    = v_start->id();
                 o_vec_unary_edge_doppler.push_back(vis_edge_unary);
@@ -649,69 +666,73 @@ std::vector<SVisEdgeUnaryDoppler> GraphOptimizer::GetVertexDopplerVel() const {
     return o_vec_unary_edge_doppler;
 }
 
-Eigen::Matrix4d GraphOptimizer::GetPredictionModel(const VertexType* n_1_vertex, const VertexType* n_2_vertex, double cur_timestamp) const {
-    Eigen::Matrix4d pred = Eigen::Matrix4d::Identity();
+Eigen::Matrix3d GraphOptimizer2D::GetPredictionModel(const VertexType2D* n_1_vertex, const VertexType2D* n_2_vertex, double cur_timestamp) const {
+    Eigen::Isometry2d pred = Eigen::Isometry2d::Identity();
 
     if ( !n_1_vertex || !n_2_vertex )
-        return pred;
+        return pred.matrix();
 
     double last_dt = n_1_vertex->timestamp - n_2_vertex->timestamp;
     double cur_dt  = cur_timestamp - n_1_vertex->timestamp;
 
+    auto n_1_pose = n_1_vertex->estimateIso2();
+    auto n_2_pose = n_2_vertex->estimateIso2();
     // Calculate the delta pose between T-2 and T-1
-    Eigen::Matrix4d delta_pose = n_2_vertex->estimateIso3().matrix().inverse() * n_1_vertex->estimateIso3().matrix();
+    Eigen::Isometry2d delta_pose = n_2_pose.inverse() * n_1_pose;
 
     // Extract linear and angular components from delta_pose
-    Eigen::Vector3d delta_translation = delta_pose.block<3, 1>(0, 3);
-    Eigen::Matrix3d delta_rotation    = delta_pose.block<3, 3>(0, 0);
+    Eigen::Vector2d delta_translation = delta_pose.translation();
+    Eigen::Matrix2d delta_rotation    = delta_pose.rotation();
+    double delta_angle = atan2(delta_rotation(1, 0), delta_rotation(0, 0));
 
     // Calculate linear and angular velocities
-    Eigen::Vector3d   linear_velocity = delta_translation / last_dt;
-    Eigen::AngleAxisd delta_angle_axis(delta_rotation);
-    Eigen::Vector3d   angular_velocity = delta_angle_axis.angle() * delta_angle_axis.axis() / last_dt;
+    Eigen::Vector2d   linear_velocity = delta_translation / last_dt;
+    double angular_velocity = delta_angle / last_dt;
 
     // Predict the translation component at the current timestamp
-    Eigen::Vector3d predicted_translation = linear_velocity * cur_dt;
+    Eigen::Vector2d predicted_translation = linear_velocity * cur_dt;
 
     // Predict the rotation component at the current timestamp
-    Eigen::AngleAxisd predicted_angle_axis(angular_velocity.norm() * cur_dt, angular_velocity.normalized());
-    Eigen::Matrix3d   predicted_rotation = predicted_angle_axis.toRotationMatrix();
+    double predicted_angle = angular_velocity * cur_dt;
+    Eigen::Matrix2d   predicted_rotation;
+    predicted_rotation << cos(predicted_angle), -sin(predicted_angle),
+                          sin(predicted_angle), cos(predicted_angle);
 
     // Form the predicted transform
-    pred.block<3, 3>(0, 0) = predicted_rotation;
-    pred.block<3, 1>(0, 3) = predicted_translation;
+    pred.linear() = predicted_rotation;
+    pred.translation() = predicted_translation;
 
-    return pred;
+    return pred.matrix();
 }
 
-Eigen::Isometry3d GraphOptimizer::CalculateEdgeError(VertexType* vertex_cur, VertexType* vertex_prev, EdgeBinaryPredictionType* edge) {
+Eigen::Isometry2d GraphOptimizer2D::CalculateEdgeError(VertexType2D* vertex_cur, VertexType2D* vertex_prev, EdgeBinaryPredictionType2D* edge) {
     // Get the measurement of the edge
-    Eigen::Isometry3d measurement = edge->measurement();
+    Eigen::Isometry2d measurement = edge->measurement();
 
     // Calculate the actual relative transform between the two vertices
-    Eigen::Isometry3d relative_transform = vertex_prev->estimateIso3().inverse() * vertex_cur->estimateIso3();
+    Eigen::Isometry2d relative_transform = vertex_prev->estimateIso2().inverse() * vertex_cur->estimateIso2();
 
     // Calculate the difference between the measurement and the actual relative transform
-    Eigen::Isometry3d error_transform = measurement.inverse() * relative_transform;
+    Eigen::Isometry2d error_transform = measurement.inverse() * relative_transform;
 
     return error_transform;
 }
 
-double GraphOptimizer::GetTransAdaptiveThreshold() {
+double GraphOptimizer2D::GetTransAdaptiveThreshold() {
     if ( !HasMoved() ) {
         return m_config.initial_trans_threshold;
     }
     return m_adaptive_threshold.ComputeTransThreshold();
 }
 
-double GraphOptimizer::GetVelAdaptiveThreshold() {
+double GraphOptimizer2D::GetVelAdaptiveThreshold() {
     if ( !HasMoved() ) {
         return m_config.initial_vel_threshold;
     }
     return m_adaptive_threshold.ComputeVelThreshold();
 }
 
-bool GraphOptimizer::HasMoved() {
+bool GraphOptimizer2D::HasMoved() {
     if ( m_poses.empty() )
         return false;
     const double motion = (m_poses.front().inverse() * m_poses.back()).block<3, 1>(0, 3).norm();

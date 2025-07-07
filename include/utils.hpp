@@ -191,6 +191,21 @@ struct Velocity {
         : linear(lin), angular(ang), time_diff_sec(time_diff) {}
 };
 
+struct Velocity2D {
+    Eigen::Vector2d linear;  // linear velocity
+    double angular; // angular velocity
+
+    double time_diff_sec;
+
+    // default constructor - initialize member variables to 0
+    Velocity2D()
+        : linear(Eigen::Vector2d::Zero()), angular(0.0), time_diff_sec(0.1) {}
+
+    // constructor with parameters
+    Velocity2D(const Eigen::Vector2d& lin, const double& ang, const double& time_diff)
+        : linear(lin), angular(ang), time_diff_sec(time_diff) {}
+};
+
 struct SCovariance {
     Eigen::Matrix3d cov;  // 3x3 covariance matrix
     Eigen::Vector3d mean; // 3D mean vector
@@ -199,6 +214,13 @@ struct SCovariance {
 
     SCovariance(const Eigen::Matrix3d& c, const Eigen::Vector3d& m) 
         : cov(c), mean(m) {}
+};
+
+struct SCovariance2D {
+    Eigen::Matrix2d cov;  // 2x2 covariance matrix
+    Eigen::Vector2d mean; // 2D mean vector
+
+    SCovariance2D() : cov(Eigen::Matrix2d::Identity()), mean(Eigen::Vector2d::Zero()) {}
 };
 
 // Visualization of graph
@@ -322,7 +344,6 @@ struct AdaptiveThreshold {
     Eigen::Matrix4d model_deviation_ = Eigen::Matrix4d::Identity();
 };
 
-
 inline Velocity CalculateVelocity(const Eigen::Matrix4d& transform, double delta_t_sec) {
     // rotation matrix
     Eigen::Matrix3d rotation = transform.block<3, 3>(0, 0);
@@ -338,6 +359,25 @@ inline Velocity CalculateVelocity(const Eigen::Matrix4d& transform, double delta
     
     // create Velocity structure and return
     Velocity velocity(linear_vel, angular_vel, delta_t_sec);
+    
+    return velocity;
+}
+
+inline Velocity2D CalculateVelocity2D(const Eigen::Isometry2d& transform, double delta_t_sec) {
+    // rotation matrix
+    Eigen::Matrix2d rotation = transform.rotation();
+    // translation vector
+    Eigen::Vector2d translation = transform.translation();
+    
+    // linear velocity v (divide translation by time change)
+    Eigen::Vector2d linear_vel = translation / delta_t_sec;
+    
+    // calculate angular velocity matrix omega (use logarithm map)
+    double angle = atan2(rotation(1, 0), rotation(0, 0));
+    double angular_vel = angle / delta_t_sec;
+    
+    // create Velocity structure and return
+    Velocity2D velocity(linear_vel, angular_vel, delta_t_sec);
     
     return velocity;
 }
@@ -441,6 +481,17 @@ inline void TransformPoints(const Eigen::Matrix4d &T, std::vector<SRadarPoint> &
                    });
 }
 
+inline void TransformPoints(const Eigen::Isometry2d &T, std::vector<SRadarPoint> &points) {
+    std::transform(points.cbegin(), points.cend(), points.begin(),
+                   [&](const auto &point) {
+                       Eigen::Vector3d p(point.pose.x(), point.pose.y(), 1.0);
+                       Eigen::Vector3d p_transformed = T.matrix() * p;
+                       SRadarPoint transformed_point = point; // copy all properties
+                       transformed_point.pose.head<2>() = p_transformed.head<2>();
+                       return transformed_point;
+                   });
+}
+
 inline void TransformPoints(const Eigen::Matrix4d &T, const std::vector<SRadarPoint> &points, std::vector<SRadarPoint> &o_points) {
     assert(points.size() == o_points.size()); // check if points and o_points have the same size
 
@@ -450,6 +501,19 @@ inline void TransformPoints(const Eigen::Matrix4d &T, const std::vector<SRadarPo
                        Eigen::Vector4d p_transformed = T * p;
                        SRadarPoint transformed_point = point; // copy all properties
                        transformed_point.pose = p_transformed.head<3>();
+                       return transformed_point;
+                   });
+}
+
+inline void TransformPoints(const Eigen::Isometry2d &T, const std::vector<SRadarPoint> &points, std::vector<SRadarPoint> &o_points) {
+    assert(points.size() == o_points.size()); // check if points and o_points have the same size
+
+    std::transform(points.cbegin(), points.cend(), o_points.begin(),
+                   [&](const auto &point) {
+                       Eigen::Vector3d p(point.pose.x(), point.pose.y(), 1.0);
+                       Eigen::Vector3d p_transformed = T.matrix() * p;
+                       SRadarPoint transformed_point = point; // copy all properties
+                       transformed_point.pose.head<2>() = p_transformed.head<2>();
                        return transformed_point;
                    });
 }
