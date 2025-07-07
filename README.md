@@ -150,3 +150,18 @@ We would also like to express our gratitude to the developers and maintainers of
 *   **g2o (General Graph Optimization):** [RainerKuemmerle/g2o](https://github.com/RainerKuemmerle/g2o) - For the versatile graph optimization framework.
 *   **VoxelMap:** [hku-mars/VoxelMap](https://github.com/hku-mars/VoxelMap) - For their efficient adaptive voxel mapping method.
 *   **glim:** [koide3/glim](https://github.com/koide3/glim) - For their versatile point cloud-based 3D localization and mapping framework.
+
+### Running the 2-D Variant
+
+Radar4VoxMap also provides a lighter **2-D version** (planar assumption) that is useful for applications where roll/pitch variations are negligible.  You can switch between 3-D (default) and 2-D simply by changing the `radar_4_vox_map_type` launch argument.
+
+```bash
+# Run the 2-D variant
+roslaunch radar_4_vox_map radar_4_vox_map.launch radar_4_vox_map_type:=2d
+```
+
+Or, change to `2d` in `ros/launch/radar_4_vox_map_ros.launch`.
+
+```xml
+<arg name="radar_4_vox_map_type" default="2d" />
+```
