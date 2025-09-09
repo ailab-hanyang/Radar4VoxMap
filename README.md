@@ -1,6 +1,6 @@
 # Radar4VoxMap: Accurate Odometry from Blurred Radar Observations
 
-**Paper:** [Radar4VoxMap: Accurate Odometry from Blurred Radar Observations](https://arxiv.org/abs/your_arxiv_id_here) (paper link will be soon)
+**Paper:** [Radar4VoxMap: Accurate Odometry from Blurred Radar Observations](https://ieeexplore.ieee.org/document/11128118)
 
 **Authors:** Jiwon Seok, Soyeong Kim, Jaeyoung Jo, Jaehwan Lee, Minseo Jung, and Kichun Jo
 
