@@ -88,6 +88,13 @@ ADD_LIBRARY(${PROJECT_NAME} STATIC
     src/graph_optimizer/edge_PV_DICP.cpp
     src/graph_optimizer/edge_PV_doppler.cpp
     src/voxeled_rcs_mapper/voxeled_rcs_mapper.cpp
+    ##### 2D implementations 
+    src/voxeled_rcs_mapper/voxeled_rcs_mapper_2d.cpp
+    src/graph_optimizer/graph_optimizer_2d.cpp
+    src/graph_optimizer/edge_PV2_DICP.cpp
+    src/graph_optimizer/edge_PV2_doppler.cpp
+    src/graph_optimizer/edge_PV2_PV2_prediction.cpp
+    src/graph_optimizer/vertex_PV2_radar.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
