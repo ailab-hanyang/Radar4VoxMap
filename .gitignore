@@ -4,6 +4,7 @@
 # build
 **/build/**
 **/install/**
+**/log/**
 
 # recording
 recording/**

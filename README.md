@@ -66,22 +66,23 @@ The comprehensive nature of the VoD dataset, particularly its high-quality 4D ra
 *   Eigen3
 *   PCL (Point Cloud Library)
 *   g2o (Graph Optimization Framework)
-*   ROS (Robot Operating System) - for using the provided ROS bags and visualization
+*   **ROS2** (Robot Operating System 2) - for using the provided ROS bags and visualization
 
 ## Build Instructions
 
+### ROS2 Build (Current Main Branch)
+
 ```bash
-# Move your catkin workspace
-cd ~/catkin_ws/src
-
 # Clone the repository
+cd ~/git
 git clone https://github.com/ailab-hanyang/Radar4VoxMap.git
+cd Radar4VoxMap
 
-cd ..
+# Build using colcon
+colcon build
 
-# Configure and build
-catkin_make
-source devel/setup.bash
+# Source the workspace
+source install/setup.bash
 ```
 
 ## Running
@@ -89,10 +90,10 @@ source devel/setup.bash
 ### With View-of-Delft (VoD) Dataset ROS Bags
 
 1.  Download the VoD ROS bag from the link provided above.
-2.  Ensure your ROS environment is sourced: `source devel/setup.bash` (if using a ROS workspace).
+2.  Ensure your ROS2 environment is sourced: `source install/setup.bash` (if using a ROS workspace).
 3.  Launch the odometry node:
     ```bash
-    roslaunch radar_4_vox_map radar_4_vox_map.launch
+    ros2 launch radar_4_vox_map radar_4_vox_map_ros.launch.xml
     ```
 
 ### Using Custom Radar Datasets
@@ -155,12 +156,13 @@ We would also like to express our gratitude to the developers and maintainers of
 
 Radar4VoxMap also provides a lighter **2-D version** (planar assumption) that is useful for applications where roll/pitch variations are negligible.  You can switch between 3-D (default) and 2-D simply by changing the `radar_4_vox_map_type` launch argument.
 
+**ROS2:**
 ```bash
 # Run the 2-D variant
-roslaunch radar_4_vox_map radar_4_vox_map.launch radar_4_vox_map_type:=2d
+ros2 launch radar_4_vox_map radar_4_vox_map_ros.launch.xml radar_4_vox_map_type:=2d
 ```
 
-Or, change to `2d` in `ros/launch/radar_4_vox_map_ros.launch`.
+Or, change to `2d` in `ros2/launch/radar_4_vox_map_ros.launch.xml`.
 
 ```xml
 <arg name="radar_4_vox_map_type" default="2d" />

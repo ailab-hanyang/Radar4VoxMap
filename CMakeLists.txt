@@ -1,36 +1,45 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.8)
 project(radar_4_vox_map)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++17)
+# C++17 Standard
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
 
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# Override Release flags to use O2 instead of O3 for numerical stability
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG -fno-fast-math")
+  message(STATUS "Using custom Release flags: ${CMAKE_CXX_FLAGS_RELEASE}")
+endif()
+
+# Find dependencies
 option(USE_SYSTEM_TBB "Use system pre-installed oneAPI/tbb" ON)
 include(thrid_party_library/find_dependencies.cmake)
 
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
-find_package(catkin REQUIRED)
+## Find ROS2 packages
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(tf2_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+
+## Find other dependencies
 find_package(PCL 1.8 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
-find_package(OpenMP REQUIRED) 
-
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    std_msgs
-    sensor_msgs
-    geometry_msgs
-    nav_msgs
-    topic_tools
-    roslib # ros::package for finding package path
-    pcl_conversions
-    rosbag
-    visualization_msgs
-    jsk_recognition_msgs
-    tf2
-    tf2_eigen
-)
+find_package(OpenMP REQUIRED)
 
 ## build g2o
 message("*** Information about build g2o ***")
@@ -57,29 +66,22 @@ if (result)
 endif()
 
 # For g2o
+set(g2o_DIR "/usr/local/lib/cmake/g2o")
 find_package(G2O REQUIRED) # g2o optimizer library
 find_package(CSparse REQUIRED) # g2o's CSparse external dependency
 find_package(Cholmod REQUIRED) # g2o's Cholmod external dependency
 find_package(SuiteSparse REQUIRED) # g2o's SuiteSparse external dependency
 
-# Call catkin_package() to generate package configuration files
-catkin_package(
-  INCLUDE_DIRS include ros
-  LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS roscpp sensor_msgs geometry_msgs nav_msgs visualization_msgs jsk_recognition_msgs tf2 tf2_eigen
-)
-
 include_directories(
     include
-    ${catkin_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
     ${PCL_INCLUDE_DIRS}
-    ros/
+    ros2/
 )
 
 ## radar_4_vox_map library
 # build radar_4_vox_map library as shared library
-ADD_LIBRARY(${PROJECT_NAME} STATIC
+add_library(${PROJECT_NAME} STATIC
     src/utils.cpp
     src/radar_4_vox_map.cpp
     src/graph_optimizer/graph_optimizer.cpp
@@ -128,21 +130,23 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 # Add radar_4_vox_map_ros executable
-add_executable(radar_4_vox_map_ros 
-  ros/radar_4_vox_map_ros.cpp
+add_executable(radar_4_vox_map_ros
+  ros2/radar_4_vox_map_ros.cpp
+)
+
+target_compile_definitions(radar_4_vox_map_ros PRIVATE
+  PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 target_include_directories(radar_4_vox_map_ros
   PRIVATE
-  ${catkin_INCLUDE_DIRS}
-  ros
+  ros2
   ${G2O_INCLUDE_DIR}
   ${CSPARSE_INCLUDE_DIR}
   ${CHOLMOD_INCLUDE_DIR}
 )
 
 target_link_libraries(radar_4_vox_map_ros
-  ${catkin_LIBRARIES}
   ${PROJECT_NAME}
   ${PCL_LIBRARIES}
   ${G2O_CORE_LIBRARY}
@@ -154,9 +158,45 @@ target_link_libraries(radar_4_vox_map_ros
   cxsparse
 )
 
+# Use ament_target_dependencies for ROS2 dependencies
+ament_target_dependencies(radar_4_vox_map_ros
+  rclcpp
+  std_msgs
+  sensor_msgs
+  geometry_msgs
+  nav_msgs
+  visualization_msgs
+  tf2
+  tf2_ros
+  tf2_eigen
+  tf2_msgs
+  pcl_conversions
+  ament_index_cpp
+)
+
 # Install targets
 install(TARGETS ${PROJECT_NAME} radar_4_vox_map_ros
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+# Install launch files
+install(DIRECTORY
+  ros2/launch/
+  DESTINATION share/${PROJECT_NAME}/launch
+)
+
+# Install config files
+install(DIRECTORY
+  config/
+  DESTINATION share/${PROJECT_NAME}/config
+)
+
+# Install rviz files
+install(DIRECTORY
+  ros2/rviz/
+  DESTINATION share/${PROJECT_NAME}/rviz
+)
+
+ament_package()

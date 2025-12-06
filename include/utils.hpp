@@ -16,9 +16,8 @@
 #include <deque>
 #include <string>
 #include <map>
+#include <cfloat>
 #include <eigen3/Eigen/Dense>
-#include <sensor_msgs/PointCloud2.h>
-#include "sensor_msgs/point_cloud2_iterator.h"
 #include <regex>
 
 #include "types/radar_point_cloud.hpp"

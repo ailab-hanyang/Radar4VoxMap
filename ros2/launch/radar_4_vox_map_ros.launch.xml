@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Launch arguments -->
+    <arg name="input_radar_topic" default="/radar/points" />
+    <!-- radar dataset type: vod, afi910, mfi920, ars548, custom -->
+    <arg name="radar_dataset_type" default="vod" />
+    <!-- radar_4_vox_map_type: 3d, 2d -->
+    <arg name="radar_4_vox_map_type" default="3d" />
+    <arg name="algorithm_ini_path" default="config/radar_4_vox_map/radar_4_vox_map_config.ini" />
+    <arg name="world_frame_id" default="world" />
+    <arg name="base_link_frame_id" default="base_link" />
+    <arg name="publish_tf" default="true" />
+    <arg name="publish_voxel_map" default="true" />
+    <arg name="publish_graph" default="true" />
+    <arg name="visualize" default="false" />
+    <arg name="publish_ground_truth_pose" default="true" />
+    <arg name="ground_truth_pose_topic" default="/pose/local" />
+
+    <!-- Launch radar_4_vox_map_ros node -->
+    <node pkg="radar_4_vox_map" exec="radar_4_vox_map_ros" name="radar_4_vox_map" output="screen">
+        <param name="radar_topic" value="$(var input_radar_topic)"/>
+        <param name="radar_dataset_type" value="$(var radar_dataset_type)"/>
+        <param name="radar_4_vox_map_type" value="$(var radar_4_vox_map_type)"/>
+        <param name="algorithm_ini_path" value="$(var algorithm_ini_path)"/>
+        <param name="world_frame_id" value="$(var world_frame_id)"/>
+        <param name="base_link_frame_id" value="$(var base_link_frame_id)"/>
+        <param name="publish_tf" value="$(var publish_tf)"/>
+        <param name="publish_voxel_map" value="$(var publish_voxel_map)"/>
+        <param name="publish_graph" value="$(var publish_graph)"/>
+        <param name="publish_ground_truth_pose" value="$(var publish_ground_truth_pose)"/>
+        <param name="ground_truth_pose_topic" value="$(var ground_truth_pose_topic)"/>
+    </node>
+
+    <!-- Launch RViz for visualization (conditional) -->
+    <node pkg="rviz2" exec="rviz2" name="rviz2"
+          args="-d $(find-pkg-share radar_4_vox_map)/rviz/radar_4_vox_map.rviz"
+          if="$(var visualize)"/>
+</launch>
