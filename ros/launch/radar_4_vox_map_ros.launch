@@ -15,6 +15,15 @@
     <arg name="visualize" default="false" />
     <arg name="publish_ground_truth_pose" default="true" />
     <arg name="ground_truth_pose_topic" default="/pose/local" />
+
+    <!-- Optional OctoMap exporter node (subscribes to existing voxel box topic) -->
+    <arg name="enable_octomap_exporter" default="true" />
+    <arg name="octomap_export_input_voxel_box_topic" default="/radar_4_vox_map/voxel_map_voxel_box_array" />
+    <arg name="octomap_export_frame_id" default="" />
+    <arg name="octomap_export_topic_name" default="/radar_4_vox_map/octomap" />
+    <arg name="octomap_export_resolution" default="1.5" />
+    <arg name="octomap_export_binary" default="true" />
+    <arg name="octomap_export_use_only_static_label" default="true" />
     
     <!-- Launch radar_4_vox_map_ros node -->
     <node pkg="radar_4_vox_map" type="radar_4_vox_map_ros" name="radar_4_vox_map" output="screen">
@@ -35,4 +44,14 @@
     <node pkg="rviz" type="rviz" name="rviz" 
           args="-d $(find radar_4_vox_map)/ros/rviz/radar_4_vox_map.rviz" 
           if="$(arg visualize)" />
+
+    <!-- Launch exporter together with the main algorithm when enabled -->
+    <node pkg="radar_4_vox_map" type="radar_4_vox_map_octomap_exporter" name="radar_4_vox_map_octomap_exporter" output="screen" if="$(arg enable_octomap_exporter)">
+        <param name="input_voxel_box_topic" value="$(arg octomap_export_input_voxel_box_topic)" />
+        <param name="octomap_export/frame_id" value="$(arg octomap_export_frame_id)" />
+        <param name="octomap_export/topic_name" value="$(arg octomap_export_topic_name)" />
+        <param name="octomap_export/resolution" value="$(arg octomap_export_resolution)" />
+        <param name="octomap_export/binary" value="$(arg octomap_export_binary)" />
+        <param name="octomap_export/use_only_static_label" value="$(arg octomap_export_use_only_static_label)" />
+    </node>
 </launch> 

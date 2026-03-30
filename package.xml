@@ -56,6 +56,8 @@
   <depend>nav_msgs</depend>
   <depend>topic_tools</depend>
   <depend>visualization_msgs</depend>
+  <depend>octomap</depend>
+  <depend>octomap_msgs</depend>
   <build_depend>tf2</build_depend>
   <build_depend>tf2_eigen</build_depend>
   <build_depend>jsk_recognition_msgs</build_depend>

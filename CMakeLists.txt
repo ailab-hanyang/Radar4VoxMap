@@ -14,7 +14,9 @@ find_package(catkin REQUIRED)
 find_package(PCL 1.8 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
-find_package(OpenMP REQUIRED) 
+find_package(OpenMP REQUIRED)
+
+find_package(octomap REQUIRED CONFIG PATHS /opt/ros/noetic/share/octomap NO_DEFAULT_PATH)
 
 find_package(catkin REQUIRED COMPONENTS
     roscpp
@@ -30,6 +32,7 @@ find_package(catkin REQUIRED COMPONENTS
     jsk_recognition_msgs
     tf2
     tf2_eigen
+    octomap_msgs
 )
 
 ## build g2o
@@ -66,7 +69,7 @@ find_package(SuiteSparse REQUIRED) # g2o's SuiteSparse external dependency
 catkin_package(
   INCLUDE_DIRS include ros
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS roscpp sensor_msgs geometry_msgs nav_msgs visualization_msgs jsk_recognition_msgs tf2 tf2_eigen
+  CATKIN_DEPENDS roscpp sensor_msgs geometry_msgs nav_msgs visualization_msgs jsk_recognition_msgs tf2 tf2_eigen octomap_msgs
 )
 
 include_directories(
@@ -132,6 +135,11 @@ add_executable(radar_4_vox_map_ros
   ros/radar_4_vox_map_ros.cpp
 )
 
+# Add dedicated OctoMap exporter executable (non-intrusive ROS layer)
+add_executable(radar_4_vox_map_octomap_exporter
+  ros/radar_4_vox_map_octomap_exporter.cpp
+)
+
 target_include_directories(radar_4_vox_map_ros
   PRIVATE
   ${catkin_INCLUDE_DIRS}
@@ -154,8 +162,20 @@ target_link_libraries(radar_4_vox_map_ros
   cxsparse
 )
 
+target_include_directories(radar_4_vox_map_octomap_exporter
+  PRIVATE
+  ${OCTOMAP_INCLUDE_DIRS}
+  ${catkin_INCLUDE_DIRS}
+  ros
+)
+
+target_link_libraries(radar_4_vox_map_octomap_exporter
+  ${catkin_LIBRARIES}
+  ${OCTOMAP_LIBRARIES}
+)
+
 # Install targets
-install(TARGETS ${PROJECT_NAME} radar_4_vox_map_ros
+install(TARGETS ${PROJECT_NAME} radar_4_vox_map_ros radar_4_vox_map_octomap_exporter
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
