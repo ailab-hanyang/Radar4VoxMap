@@ -588,7 +588,10 @@ void VoxelHashMap::UpdateCovWithSet(std::unordered_set<Voxel, VoxelHash> set_vox
         auto it = m_voxel_map.find(voxel);  // Search the voxel in the map
         
         if (it != m_voxel_map.end()) {
-            it->second.CalCov(m_config.use_tbb, m_config.voxel_map_use_rcs, m_config.voxel_map_use_range_weight);
+            it->second.CalCov(m_config.use_tbb,
+                              m_config.voxel_map_use_rcs,
+                              m_config.voxel_map_use_range_weight,
+                              m_config.voxel_static_ratio_threshold);
         }
     }
 }

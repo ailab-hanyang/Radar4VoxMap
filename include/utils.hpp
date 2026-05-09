@@ -113,6 +113,7 @@ struct VoxelRcsMapperConfig{
     int voxel_search_level;
     bool voxel_map_use_rcs;
     bool voxel_map_use_range_weight;
+    double voxel_static_ratio_threshold;
 
     double initial_trans_threshold;
     double initial_vel_threshold;

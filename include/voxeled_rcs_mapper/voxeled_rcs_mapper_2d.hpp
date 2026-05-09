@@ -96,7 +96,10 @@ struct Voxel2DHashMap{
             ref_rcs = 0.0;  // initialize with 0
             is_static = false;  // initialize with false
         }
-        inline void CalCov(const bool use_tbb, const bool use_rcs_weight, const bool use_range_weight) {
+        inline void CalCov(const bool use_tbb,
+                           const bool use_rcs_weight,
+                           const bool use_range_weight,
+                           const double static_ratio_threshold) {
             int n = points.size();
 
             covariance.cov = Eigen::Matrix2d::Identity();
@@ -158,8 +161,7 @@ struct Voxel2DHashMap{
                     max_rcs = points[j].rcs;
             }
         
-            // if more than half of the points are static, then the voxel is static
-            is_static = (static_cast<double>(point_static_count) / n > 0.5);
+            is_static = (static_cast<double>(point_static_count) / n > static_ratio_threshold);
 
             // if weight is 0, then covariance calculation is not possible
             if (weight_sum == 0.0) {

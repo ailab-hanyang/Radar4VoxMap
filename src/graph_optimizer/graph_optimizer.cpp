@@ -482,7 +482,10 @@ void GraphOptimizer::UpdateVoxelMap() {
     for ( auto& pair : m_voxel_hash_map.m_voxel_map ) {
         auto& voxel_block = pair.second;
         if ( voxel_block.is_changed == true ) {
-            voxel_block.CalCov(m_config.use_tbb, m_config.voxel_map_use_rcs, m_config.voxel_map_use_range_weight);
+            voxel_block.CalCov(m_config.use_tbb,
+                               m_config.voxel_map_use_rcs,
+                               m_config.voxel_map_use_range_weight,
+                               m_config.voxel_static_ratio_threshold);
             voxel_block.is_changed = false;
         }
     }
