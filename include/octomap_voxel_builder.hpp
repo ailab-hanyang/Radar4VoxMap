@@ -51,22 +51,18 @@ public:
                            const Input& input,
                            const GroundPlaneModel& ground_plane) const;
 
-    Eigen::Vector3d transformGroundFilterPointToWorld(
-        const Eigen::Vector3d& point_filter,
-        const Eigen::Matrix4d& radar_pose) const;
+    Eigen::Vector3d transformGroundFilterPointToWorld(const Eigen::Vector3d& point_filter,
+                                                      const Eigen::Matrix4d& radar_pose) const;
 
-    Eigen::Vector3d transformGroundFilterVectorToWorld(
-        const Eigen::Vector3d& vector_filter,
-        const Eigen::Matrix4d& radar_pose) const;
+    Eigen::Vector3d transformGroundFilterVectorToWorld(const Eigen::Vector3d& vector_filter,
+                                                       const Eigen::Matrix4d& radar_pose) const;
 
 private:
-    Eigen::Vector3d transformWorldPointToGroundFilterFrame(
-        const Eigen::Vector3d& point_world,
-        const Eigen::Matrix4d& radar_pose) const;
+    Eigen::Vector3d transformWorldPointToGroundFilterFrame(const Eigen::Vector3d& point_world,
+                                                           const Eigen::Matrix4d& radar_pose) const;
 
-    Eigen::Matrix3d transformWorldCovarianceToGroundFilterFrame(
-        const Eigen::Matrix3d& covariance_world,
-        const Eigen::Matrix4d& radar_pose) const;
+    Eigen::Matrix3d transformWorldCovarianceToGroundFilterFrame(const Eigen::Matrix3d& covariance_world,
+                                                                const Eigen::Matrix4d& radar_pose) const;
 
     bool isGroundVoxel(const VoxelHashMap::VoxelBlock& voxel,
                        const GroundPlaneModel& ground_plane,

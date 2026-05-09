@@ -131,17 +131,15 @@ Radar4VoxMapOctomapVoxelBuilder::estimateGroundPlane(const Input& input) const {
     return model;
 }
 
-bool Radar4VoxMapOctomapVoxelBuilder::shouldExportVoxel(
-    const VoxelHashMap::VoxelBlock& voxel,
-    const Input& input,
-    const GroundPlaneModel& ground_plane) const {
+bool Radar4VoxMapOctomapVoxelBuilder::shouldExportVoxel(const VoxelHashMap::VoxelBlock& voxel,
+                                                        const Input& input,
+                                                        const GroundPlaneModel& ground_plane) const {
     return passesVisualizationFilter(voxel, input) &&
            !isGroundVoxel(voxel, ground_plane, input.radar_pose);
 }
 
-Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformWorldPointToGroundFilterFrame(
-    const Eigen::Vector3d& point_world,
-    const Eigen::Matrix4d& radar_pose) const {
+Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformWorldPointToGroundFilterFrame(const Eigen::Vector3d& point_world,
+                                                                                        const Eigen::Matrix4d& radar_pose) const {
     Eigen::Vector4d point_world_h;
     point_world_h << point_world, 1.0;
     const Eigen::Vector4d point_in_current_radar_h = radar_pose.inverse() * point_world_h;
@@ -149,36 +147,32 @@ Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformWorldPointToGroundFilt
     return config_.radar_extrinsic * point_in_current_radar;
 }
 
-Eigen::Matrix3d Radar4VoxMapOctomapVoxelBuilder::transformWorldCovarianceToGroundFilterFrame(
-    const Eigen::Matrix3d& covariance_world,
-    const Eigen::Matrix4d& radar_pose) const {
+Eigen::Matrix3d Radar4VoxMapOctomapVoxelBuilder::transformWorldCovarianceToGroundFilterFrame(const Eigen::Matrix3d& covariance_world,
+                                                                                             const Eigen::Matrix4d& radar_pose) const {
     const Eigen::Matrix3d world_to_current_radar_rotation = radar_pose.block<3, 3>(0, 0).transpose();
     const Eigen::Matrix3d world_to_ground_filter_rotation = config_.radar_extrinsic.linear() *
                                                             world_to_current_radar_rotation;
     return world_to_ground_filter_rotation * covariance_world * world_to_ground_filter_rotation.transpose();
 }
 
-Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformGroundFilterPointToWorld(
-    const Eigen::Vector3d& point_filter,
-    const Eigen::Matrix4d& radar_pose) const {
+Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformGroundFilterPointToWorld(const Eigen::Vector3d& point_filter,
+                                                                                   const Eigen::Matrix4d& radar_pose) const {
     const Eigen::Vector3d point_radar = config_.radar_extrinsic.inverse() * point_filter;
     Eigen::Vector4d point_radar_h;
     point_radar_h << point_radar, 1.0;
     return (radar_pose * point_radar_h).head<3>();
 }
 
-Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformGroundFilterVectorToWorld(
-    const Eigen::Vector3d& vector_filter,
-    const Eigen::Matrix4d& radar_pose) const {
+Eigen::Vector3d Radar4VoxMapOctomapVoxelBuilder::transformGroundFilterVectorToWorld(const Eigen::Vector3d& vector_filter,
+                                                                                    const Eigen::Matrix4d& radar_pose) const {
     const Eigen::Vector3d vector_radar = config_.radar_extrinsic.linear().transpose() *
                                          vector_filter;
     return radar_pose.block<3, 3>(0, 0) * vector_radar;
 }
 
-bool Radar4VoxMapOctomapVoxelBuilder::isGroundVoxel(
-    const VoxelHashMap::VoxelBlock& voxel,
-    const GroundPlaneModel& ground_plane,
-    const Eigen::Matrix4d& radar_pose) const {
+bool Radar4VoxMapOctomapVoxelBuilder::isGroundVoxel(const VoxelHashMap::VoxelBlock& voxel,
+                                                    const GroundPlaneModel& ground_plane,
+                                                    const Eigen::Matrix4d& radar_pose) const {
     if (!config_.ground_filter_enable) {
         return false;
     }
@@ -187,10 +181,10 @@ bool Radar4VoxMapOctomapVoxelBuilder::isGroundVoxel(
         return isGroundVoxelByHeight(voxel, radar_pose);
     }
 
-    const Eigen::Vector3d mean_in_ground_filter_frame = transformWorldPointToGroundFilterFrame(
-        voxel.covariance.mean, radar_pose);
-    const Eigen::Matrix3d covariance_in_ground_filter_frame = transformWorldCovarianceToGroundFilterFrame(
-        voxel.covariance.cov, radar_pose);
+    const Eigen::Vector3d mean_in_ground_filter_frame = transformWorldPointToGroundFilterFrame(voxel.covariance.mean,
+                                                                                               radar_pose);
+    const Eigen::Matrix3d covariance_in_ground_filter_frame = transformWorldCovarianceToGroundFilterFrame(voxel.covariance.cov,
+                                                                                                          radar_pose);
 
     const double signed_distance_to_plane = ground_plane.normal.dot(mean_in_ground_filter_frame) +
                                             ground_plane.offset;
@@ -207,34 +201,31 @@ bool Radar4VoxMapOctomapVoxelBuilder::isGroundVoxel(
                config_.ground_covariance_sigma_scale * sigma_along_plane_normal;
 }
 
-bool Radar4VoxMapOctomapVoxelBuilder::isGroundVoxelByHeight(
-    const VoxelHashMap::VoxelBlock& voxel,
-    const Eigen::Matrix4d& radar_pose) const {
+bool Radar4VoxMapOctomapVoxelBuilder::isGroundVoxelByHeight(const VoxelHashMap::VoxelBlock& voxel,
+                                                            const Eigen::Matrix4d& radar_pose) const {
     if (!config_.ground_filter_enable) {
         return false;
     }
 
-    const Eigen::Vector3d mean_in_ground_filter_frame = transformWorldPointToGroundFilterFrame(
-        voxel.covariance.mean, radar_pose);
-    const Eigen::Matrix3d covariance_in_ground_filter_frame = transformWorldCovarianceToGroundFilterFrame(
-        voxel.covariance.cov, radar_pose);
+    const Eigen::Vector3d mean_in_ground_filter_frame = transformWorldPointToGroundFilterFrame(voxel.covariance.mean,
+                                                                                               radar_pose);
+    const Eigen::Matrix3d covariance_in_ground_filter_frame = transformWorldCovarianceToGroundFilterFrame(voxel.covariance.cov,
+                                                                                                          radar_pose);
 
     double z_variance_in_ground_filter_frame = covariance_in_ground_filter_frame(2, 2);
     if (!std::isfinite(z_variance_in_ground_filter_frame)) {
         z_variance_in_ground_filter_frame = 0.0;
     }
 
-    const double z_sigma_in_ground_filter_frame = std::sqrt(
-        std::max(0.0, z_variance_in_ground_filter_frame));
+    const double z_sigma_in_ground_filter_frame = std::sqrt(std::max(0.0, z_variance_in_ground_filter_frame));
     const double ground_test_z = mean_in_ground_filter_frame.z() -
                                  config_.ground_covariance_sigma_scale * z_sigma_in_ground_filter_frame;
 
     return ground_test_z < 0.0;
 }
 
-bool Radar4VoxMapOctomapVoxelBuilder::passesVisualizationFilter(
-    const VoxelHashMap::VoxelBlock& voxel,
-    const Input& input) const {
+bool Radar4VoxMapOctomapVoxelBuilder::passesVisualizationFilter(const VoxelHashMap::VoxelBlock& voxel,
+                                                                const Input& input) const {
     return voxel.points.size() >= static_cast<size_t>(input.voxel_visualize_min_point) &&
            (voxel.is_static || !input.voxel_visualize_only_static);
 }

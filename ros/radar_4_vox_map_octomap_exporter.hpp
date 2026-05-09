@@ -47,8 +47,7 @@ private:
      * @param msg Voxel bounding box array
      * @return OcTree when conversion succeeds, otherwise nullptr
      */
-    std::unique_ptr<octomap::OcTree> buildOctomapFromVoxelBoxes(
-        const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& msg) const;
+    std::unique_ptr<octomap::OcTree> buildOctomapFromVoxelBoxes(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& msg) const;
 
     /**
      * @brief Callback for voxel bounding box messages

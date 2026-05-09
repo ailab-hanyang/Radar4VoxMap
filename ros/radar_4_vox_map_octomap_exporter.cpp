@@ -47,10 +47,9 @@ bool Radar4VoxMapOctomapExporter::initialize() {
     return true;
 }
 
-bool Radar4VoxMapOctomapExporter::getSourceToTargetTransform(
-    const std::string& source_frame,
-    const ros::Time& stamp,
-    tf2::Transform& source_to_target) const {
+bool Radar4VoxMapOctomapExporter::getSourceToTargetTransform(const std::string& source_frame,
+                                                             const ros::Time& stamp,
+                                                             tf2::Transform& source_to_target) const {
     source_to_target.setIdentity();
 
     if (octomap_export_target_frame_id_.empty() || source_frame == octomap_export_target_frame_id_) {
@@ -83,8 +82,7 @@ bool Radar4VoxMapOctomapExporter::getSourceToTargetTransform(
     }
 }
 
-std::unique_ptr<octomap::OcTree> Radar4VoxMapOctomapExporter::buildOctomapFromVoxelBoxes(
-    const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& msg) const {
+std::unique_ptr<octomap::OcTree> Radar4VoxMapOctomapExporter::buildOctomapFromVoxelBoxes(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& msg) const {
     auto tree = std::make_unique<octomap::OcTree>(octomap_export_resolution_);
     tf2::Transform source_to_target;
     if (!getSourceToTargetTransform(msg->header.frame_id, msg->header.stamp, source_to_target)) {
@@ -100,19 +98,17 @@ std::unique_ptr<octomap::OcTree> Radar4VoxMapOctomapExporter::buildOctomapFromVo
                                            box.pose.position.y,
                                            box.pose.position.z);
         const tf2::Vector3 point_for_octomap = source_to_target * point_in_source;
-        tree->updateNode(
-            octomap::point3d(static_cast<float>(point_for_octomap.x()),
-                             static_cast<float>(point_for_octomap.y()),
-                             static_cast<float>(point_for_octomap.z())),
-            true);
+        tree->updateNode(octomap::point3d(static_cast<float>(point_for_octomap.x()),
+                                          static_cast<float>(point_for_octomap.y()),
+                                          static_cast<float>(point_for_octomap.z())),
+                         true);
     }
 
     tree->updateInnerOccupancy();
     return tree;
 }
 
-void Radar4VoxMapOctomapExporter::voxelBoxCallback(
-    const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& voxel_boxes_msg) {
+void Radar4VoxMapOctomapExporter::voxelBoxCallback(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr& voxel_boxes_msg) {
     auto octree = buildOctomapFromVoxelBoxes(voxel_boxes_msg);
     if (!octree) {
         return;
