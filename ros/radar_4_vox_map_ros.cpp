@@ -4,6 +4,12 @@
  */
 
 #include "radar_4_vox_map_ros.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
+#include <geometry_msgs/Point.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/package.h>
@@ -19,6 +25,17 @@ Radar4VoxMapROS::Radar4VoxMapROS(ros::NodeHandle& nh) : nh_(nh) {
     last_published_binary_edge_num_ = 0;
     last_published_unary_edge_num_ = 0;
     last_published_unary_edge_doppler_num_ = 0;
+    octomap_ground_filter_method_ = "height";
+    octomap_ground_plane_ransac_iterations_ = 80;
+    octomap_ground_plane_fit_distance_threshold_ = 0.15;
+    octomap_ground_plane_remove_above_threshold_ = 0.15;
+    octomap_ground_plane_max_tilt_deg_ = 20.0;
+    octomap_ground_plane_min_inliers_ = 20;
+    octomap_ground_plane_candidate_max_height_ = 0.6;
+    octomap_ground_plane_marker_size_ = 12.0;
+    octomap_radar_extrinsic_translation_ = {0.0, 0.0, 0.0};
+    octomap_radar_extrinsic_rpy_deg_ = {0.0, 0.0, 0.0};
+    octomap_radar_extrinsic_.setIdentity();
     
     // Initialize radar_4_vox_map core
     radar_4_vox_map_ = std::make_shared<Radar4VoxMap>();
@@ -41,6 +58,25 @@ bool Radar4VoxMapROS::initialize() {
     nh_.param<bool>("publish_graph", publish_graph_, true);
     nh_.param<bool>("publish_ground_truth_pose", publish_ground_truth_pose_, false);
     nh_.param<std::string>("ground_truth_pose_topic", ground_truth_pose_topic_, "/pose/local");
+    nh_.param<std::string>("octomap_voxel_box_topic", octomap_voxel_box_topic_, "/radar_4_vox_map/octomap_voxel_box_array");
+    nh_.param<std::vector<double>>("octomap_radar_extrinsic/translation",
+                                   octomap_radar_extrinsic_translation_,
+                                   std::vector<double>{0.0, 0.0, 0.0});
+    nh_.param<std::vector<double>>("octomap_radar_extrinsic/rpy_deg",
+                                   octomap_radar_extrinsic_rpy_deg_,
+                                   std::vector<double>{0.0, 0.0, 0.0});
+    const Eigen::Vector3d radar_extrinsic_translation(octomap_radar_extrinsic_translation_[0],
+                                                      octomap_radar_extrinsic_translation_[1],
+                                                      octomap_radar_extrinsic_translation_[2]);
+    const double roll_rad = octomap_radar_extrinsic_rpy_deg_[0] * M_PI / 180.0;
+    const double pitch_rad = octomap_radar_extrinsic_rpy_deg_[1] * M_PI / 180.0;
+    const double yaw_rad = octomap_radar_extrinsic_rpy_deg_[2] * M_PI / 180.0;
+    const Eigen::Matrix3d radar_extrinsic_rotation = (Eigen::AngleAxisd(yaw_rad, Eigen::Vector3d::UnitZ()) *
+                                                      Eigen::AngleAxisd(pitch_rad, Eigen::Vector3d::UnitY()) *
+                                                      Eigen::AngleAxisd(roll_rad, Eigen::Vector3d::UnitX())).toRotationMatrix();
+    octomap_radar_extrinsic_.setIdentity();
+    octomap_radar_extrinsic_.linear() = radar_extrinsic_rotation;
+    octomap_radar_extrinsic_.translation() = radar_extrinsic_translation;
     
     ROS_INFO("Radar4VoxMapROS initializing with parameters:");
     ROS_INFO_STREAM("  radar_topic: " << radar_topic_);
@@ -54,6 +90,15 @@ bool Radar4VoxMapROS::initialize() {
     ROS_INFO_STREAM("  publish_graph: " << publish_graph_);
     ROS_INFO_STREAM("  publish_ground_truth_pose: " << publish_ground_truth_pose_);
     ROS_INFO_STREAM("  ground_truth_pose_topic: " << ground_truth_pose_topic_);
+    ROS_INFO_STREAM("  octomap_voxel_box_topic: " << octomap_voxel_box_topic_);
+    ROS_INFO_STREAM("  octomap_radar_extrinsic/translation: ["
+                    << octomap_radar_extrinsic_translation_[0] << ", "
+                    << octomap_radar_extrinsic_translation_[1] << ", "
+                    << octomap_radar_extrinsic_translation_[2] << "]");
+    ROS_INFO_STREAM("  octomap_radar_extrinsic/rpy_deg: ["
+                    << octomap_radar_extrinsic_rpy_deg_[0] << ", "
+                    << octomap_radar_extrinsic_rpy_deg_[1] << ", "
+                    << octomap_radar_extrinsic_rpy_deg_[2] << "]");
     
     // Setup ROS interface
     setupROSInterface();
@@ -125,6 +170,7 @@ bool Radar4VoxMapROS::initialize() {
         
         ini_handler.ParseConfig("voxel_map", "voxel_map_use_rcs", vox_map_config_.voxel_map_use_rcs);
         ini_handler.ParseConfig("voxel_map", "voxel_map_use_range_weight", vox_map_config_.voxel_map_use_range_weight);
+        ini_handler.ParseConfig("voxel_map", "voxel_static_ratio_threshold", vox_map_config_.voxel_static_ratio_threshold);
         
         // Load adaptive threshold settings
         if (!ini_handler.ParseConfig("adaptive_threshold", "initial_trans_threshold", vox_map_config_.initial_trans_threshold) ||
@@ -146,6 +192,18 @@ bool Radar4VoxMapROS::initialize() {
         // Load virtual gravity align settings
         ini_handler.ParseConfig("virtual_gravity_align", "virtual_gravity_align", vox_map_config_.virtual_gravity_align);
         ini_handler.ParseConfig("virtual_gravity_align", "virtual_gravity_align_information", vox_map_config_.virtual_gravity_align_information);
+
+        // Load OctoMap voxel export settings
+        ini_handler.ParseConfig("octomap", "ground_filter_enable", octomap_ground_filter_enable_);
+        ini_handler.ParseConfig("octomap", "ground_filter_method", octomap_ground_filter_method_);
+        ini_handler.ParseConfig("octomap", "ground_covariance_sigma_scale", octomap_ground_covariance_sigma_scale_);
+        ini_handler.ParseConfig("octomap", "plane_ransac_iterations", octomap_ground_plane_ransac_iterations_);
+        ini_handler.ParseConfig("octomap", "plane_fit_distance_threshold", octomap_ground_plane_fit_distance_threshold_);
+        ini_handler.ParseConfig("octomap", "plane_remove_above_threshold", octomap_ground_plane_remove_above_threshold_);
+        ini_handler.ParseConfig("octomap", "plane_max_tilt_deg", octomap_ground_plane_max_tilt_deg_);
+        ini_handler.ParseConfig("octomap", "plane_min_inliers", octomap_ground_plane_min_inliers_);
+        ini_handler.ParseConfig("octomap", "plane_candidate_max_height", octomap_ground_plane_candidate_max_height_);
+        ini_handler.ParseConfig("octomap", "plane_marker_size", octomap_ground_plane_marker_size_);
     } else {
         ROS_ERROR("Failed to load INI file: %s", full_ini_path.c_str());
         return false;
@@ -176,6 +234,8 @@ void Radar4VoxMapROS::setupROSInterface() {
     estimated_pose_array_pub_    = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/estimated_pose_array", 5);
     voxel_map_marker_array_pub_  = nh_.advertise<visualization_msgs::MarkerArray>("/radar_4_vox_map/voxel_map_marker_array", 5);
     voxel_map_box_array_pub_     = nh_.advertise<jsk_recognition_msgs::BoundingBoxArray>("/radar_4_vox_map/voxel_map_voxel_box_array", 5);
+    octomap_voxel_map_box_array_pub_ = nh_.advertise<jsk_recognition_msgs::BoundingBoxArray>(octomap_voxel_box_topic_, 5);
+    octomap_ground_plane_marker_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/radar_4_vox_map/octomap_ground_plane_marker_array", 5);
     graph_marker_array_pub_      = nh_.advertise<visualization_msgs::MarkerArray>("/radar_4_vox_map/graph_marker_array", 5);
     graph_vertex_pose_array_pub_ = nh_.advertise<geometry_msgs::PoseArray>("/radar_4_vox_map/graph_vertex_pose_array", 5);
     estimated_pose_pub_          = nh_.advertise<geometry_msgs::PoseStamped>("/radar_4_vox_map/estimated_pose", 5);
@@ -391,10 +451,34 @@ void Radar4VoxMapROS::publishVoxelMap() {
     // Convert to visualization messages
     voxel_map_marker_array_ = getVoxelMapMarkerArray();
     voxel_map_box_array_ = getVoxelMapBoxArray();
+    Radar4VoxMapOctomapVoxelBuilder::Config octomap_config;
+    octomap_config.ground_filter_enable = octomap_ground_filter_enable_;
+    octomap_config.ground_filter_method = octomap_ground_filter_method_;
+    octomap_config.ground_covariance_sigma_scale = octomap_ground_covariance_sigma_scale_;
+    octomap_config.plane_ransac_iterations = octomap_ground_plane_ransac_iterations_;
+    octomap_config.plane_fit_distance_threshold = octomap_ground_plane_fit_distance_threshold_;
+    octomap_config.plane_remove_above_threshold = octomap_ground_plane_remove_above_threshold_;
+    octomap_config.plane_max_tilt_deg = octomap_ground_plane_max_tilt_deg_;
+    octomap_config.plane_min_inliers = octomap_ground_plane_min_inliers_;
+    octomap_config.plane_candidate_max_height = octomap_ground_plane_candidate_max_height_;
+    octomap_config.plane_marker_size = octomap_ground_plane_marker_size_;
+    octomap_config.radar_extrinsic = octomap_radar_extrinsic_;
+
+    const Radar4VoxMapOctomapVoxelBuilder octomap_builder(octomap_config);
+    const Radar4VoxMapOctomapVoxelBuilder::Input octomap_input{
+        global_voxel_block_,
+        radar_pose_,
+        vox_map_config_.voxel_visualize_min_point,
+        vox_map_config_.voxel_visualize_only_static};
+    const auto ground_plane = octomap_builder.estimateGroundPlane(octomap_input);
+    octomap_voxel_map_box_array_ = getOctomapVoxelMapBoxArray(octomap_builder, octomap_input, ground_plane);
+    octomap_ground_plane_marker_array_ = getOctomapGroundPlaneMarkerArray(octomap_builder, octomap_input, ground_plane);
     
     // Publish visualization
     voxel_map_marker_array_pub_.publish(voxel_map_marker_array_);
     voxel_map_box_array_pub_.publish(voxel_map_box_array_);
+    octomap_voxel_map_box_array_pub_.publish(octomap_voxel_map_box_array_);
+    octomap_ground_plane_marker_array_pub_.publish(octomap_ground_plane_marker_array_);
 }
 
 void Radar4VoxMapROS::publishGraphVisualization() {
@@ -683,6 +767,141 @@ jsk_recognition_msgs::BoundingBoxArray Radar4VoxMapROS::getVoxelMapBoxArray() {
     }
     
     return bbox_array;
+}
+
+jsk_recognition_msgs::BoundingBoxArray Radar4VoxMapROS::getOctomapVoxelMapBoxArray(
+    const Radar4VoxMapOctomapVoxelBuilder& octomap_builder,
+    const Radar4VoxMapOctomapVoxelBuilder::Input& octomap_input,
+    const Radar4VoxMapOctomapVoxelBuilder::GroundPlaneModel& ground_plane) const {
+    jsk_recognition_msgs::BoundingBoxArray bbox_array;
+    bbox_array.header.frame_id = world_frame_id_;
+    bbox_array.header.stamp = current_ros_time_;
+
+    for (const auto& voxel : octomap_input.voxel_blocks) {
+        if (!octomap_builder.shouldExportVoxel(voxel, octomap_input, ground_plane)) {
+            continue;
+        }
+
+        jsk_recognition_msgs::BoundingBox bbox;
+        bbox.header.frame_id = world_frame_id_;
+        bbox.header.stamp = current_ros_time_;
+        bbox.label = voxel.is_static;
+        bbox.dimensions.x = vox_map_config_.voxel_size;
+        bbox.dimensions.y = vox_map_config_.voxel_size;
+        bbox.dimensions.z = vox_map_config_.voxel_size;
+        bbox.pose.position.x = voxel.voxel_center(0);
+        bbox.pose.position.y = voxel.voxel_center(1);
+        bbox.pose.position.z = voxel.voxel_center(2);
+        bbox.pose.orientation.w = 1.0;
+        bbox.value = 0.0;
+
+        bbox_array.boxes.push_back(bbox);
+    }
+
+    return bbox_array;
+}
+
+visualization_msgs::MarkerArray Radar4VoxMapROS::getOctomapGroundPlaneMarkerArray(
+    const Radar4VoxMapOctomapVoxelBuilder& octomap_builder,
+    const Radar4VoxMapOctomapVoxelBuilder::Input& octomap_input,
+    const Radar4VoxMapOctomapVoxelBuilder::GroundPlaneModel& ground_plane) const {
+    visualization_msgs::MarkerArray marker_array;
+
+    visualization_msgs::Marker plane_marker;
+    plane_marker.header.frame_id = world_frame_id_;
+    plane_marker.header.stamp = current_ros_time_;
+    plane_marker.ns = "octomap_ground_plane";
+    plane_marker.id = 0;
+    plane_marker.type = visualization_msgs::Marker::CUBE;
+    plane_marker.pose.orientation.w = 1.0;
+
+    visualization_msgs::Marker normal_marker;
+    normal_marker.header = plane_marker.header;
+    normal_marker.ns = "octomap_ground_plane_normal";
+    normal_marker.id = 1;
+    normal_marker.type = visualization_msgs::Marker::ARROW;
+    normal_marker.pose.orientation.w = 1.0;
+
+    if (!octomap_ground_filter_enable_ ||
+        octomap_ground_filter_method_ != "plane" ||
+        !ground_plane.valid) {
+        plane_marker.action = visualization_msgs::Marker::DELETE;
+        normal_marker.action = visualization_msgs::Marker::DELETE;
+        marker_array.markers.push_back(plane_marker);
+        marker_array.markers.push_back(normal_marker);
+        return marker_array;
+    }
+
+    const Eigen::Vector3d normal_filter = ground_plane.normal.normalized();
+    Eigen::Vector3d x_axis_filter = Eigen::Vector3d::UnitX() -
+                                    normal_filter * normal_filter.dot(Eigen::Vector3d::UnitX());
+    if (x_axis_filter.norm() < 1e-6) {
+        x_axis_filter = Eigen::Vector3d::UnitY() -
+                        normal_filter * normal_filter.dot(Eigen::Vector3d::UnitY());
+    }
+    x_axis_filter.normalize();
+    Eigen::Vector3d y_axis_filter = normal_filter.cross(x_axis_filter).normalized();
+
+    Eigen::Matrix3d plane_orientation_filter;
+    plane_orientation_filter.col(0) = x_axis_filter;
+    plane_orientation_filter.col(1) = y_axis_filter;
+    plane_orientation_filter.col(2) = normal_filter;
+
+    const Eigen::Matrix3d radar_to_world_rotation = octomap_input.radar_pose.block<3, 3>(0, 0);
+    const Eigen::Matrix3d filter_to_world_rotation = radar_to_world_rotation *
+                                                     octomap_radar_extrinsic_.linear().transpose();
+    const Eigen::Matrix3d plane_orientation_world = filter_to_world_rotation *
+                                                   plane_orientation_filter;
+    const Eigen::Quaterniond plane_quaternion(plane_orientation_world);
+
+    const Eigen::Vector3d plane_center_filter = -ground_plane.offset * normal_filter;
+    const Eigen::Vector3d plane_center_world = octomap_builder.transformGroundFilterPointToWorld(
+        plane_center_filter, octomap_input.radar_pose);
+    const Eigen::Vector3d normal_world = octomap_builder.transformGroundFilterVectorToWorld(
+        normal_filter, octomap_input.radar_pose).normalized();
+
+    plane_marker.action = visualization_msgs::Marker::ADD;
+    plane_marker.pose.position.x = plane_center_world.x();
+    plane_marker.pose.position.y = plane_center_world.y();
+    plane_marker.pose.position.z = plane_center_world.z();
+    plane_marker.pose.orientation.x = plane_quaternion.x();
+    plane_marker.pose.orientation.y = plane_quaternion.y();
+    plane_marker.pose.orientation.z = plane_quaternion.z();
+    plane_marker.pose.orientation.w = plane_quaternion.w();
+    plane_marker.scale.x = octomap_ground_plane_marker_size_;
+    plane_marker.scale.y = octomap_ground_plane_marker_size_;
+    plane_marker.scale.z = 0.03;
+    plane_marker.color.r = 0.1;
+    plane_marker.color.g = 0.8;
+    plane_marker.color.b = 0.2;
+    plane_marker.color.a = 0.5;
+    marker_array.markers.push_back(plane_marker);
+
+    geometry_msgs::Point arrow_start;
+    arrow_start.x = plane_center_world.x();
+    arrow_start.y = plane_center_world.y();
+    arrow_start.z = plane_center_world.z();
+
+    geometry_msgs::Point arrow_end;
+    const Eigen::Vector3d arrow_end_world = plane_center_world +
+                                            normal_world * std::max(0.5, octomap_ground_plane_marker_size_ * 0.18);
+    arrow_end.x = arrow_end_world.x();
+    arrow_end.y = arrow_end_world.y();
+    arrow_end.z = arrow_end_world.z();
+
+    normal_marker.action = visualization_msgs::Marker::ADD;
+    normal_marker.points.push_back(arrow_start);
+    normal_marker.points.push_back(arrow_end);
+    normal_marker.scale.x = 0.05;
+    normal_marker.scale.y = 0.12;
+    normal_marker.scale.z = 0.18;
+    normal_marker.color.r = 0.0;
+    normal_marker.color.g = 0.4;
+    normal_marker.color.b = 1.0;
+    normal_marker.color.a = 0.9;
+    marker_array.markers.push_back(normal_marker);
+
+    return marker_array;
 }
 
 visualization_msgs::MarkerArray Radar4VoxMapROS::getGraphMarkerArray() {

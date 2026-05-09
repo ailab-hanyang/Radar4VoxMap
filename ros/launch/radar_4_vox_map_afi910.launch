@@ -15,11 +15,14 @@
     <arg name="visualize" default="false" />
     <arg name="publish_ground_truth_pose" default="false" />
     <arg name="ground_truth_pose_topic" default="/pose/local" />
+    <arg name="octomap_voxel_box_topic" default="/radar_4_vox_map/octomap_voxel_box_array" />
+    <arg name="octomap_radar_extrinsic_translation" default="0.0, 0.0, 0.0" />
+    <arg name="octomap_radar_extrinsic_rpy_deg" default="0.0, 0.0, 0.0" />
 
     <!-- Optional OctoMap exporter node (subscribes to existing voxel box topic) -->
     <arg name="enable_octomap_exporter" default="false" />
-    <arg name="octomap_export_input_voxel_box_topic" default="/radar_4_vox_map/voxel_map_voxel_box_array" />
-    <arg name="octomap_export_frame_id" default="" />
+    <arg name="octomap_export_input_voxel_box_topic" default="$(arg octomap_voxel_box_topic)" />
+    <arg name="octomap_export_target_frame_id" default="$(arg base_link_frame_id)" />
     <arg name="octomap_export_topic_name" default="/radar_4_vox_map/octomap" />
     <arg name="octomap_export_resolution" default="1.5" />
     <arg name="octomap_export_binary" default="true" />
@@ -38,6 +41,9 @@
         <param name="publish_graph" value="$(arg publish_graph)" />
         <param name="publish_ground_truth_pose" value="$(arg publish_ground_truth_pose)" />
         <param name="ground_truth_pose_topic" value="$(arg ground_truth_pose_topic)" />
+        <param name="octomap_voxel_box_topic" value="$(arg octomap_voxel_box_topic)" />
+        <rosparam param="octomap_radar_extrinsic/translation" subst_value="true">[$(arg octomap_radar_extrinsic_translation)]</rosparam>
+        <rosparam param="octomap_radar_extrinsic/rpy_deg" subst_value="true">[$(arg octomap_radar_extrinsic_rpy_deg)]</rosparam>
     </node>
     
     <!-- Launch RViz for visualization (optional) -->
@@ -48,7 +54,7 @@
     <!-- Launch exporter together with the main algorithm when enabled -->
     <node pkg="radar_4_vox_map" type="radar_4_vox_map_octomap_exporter" name="radar_4_vox_map_octomap_exporter" output="screen" if="$(arg enable_octomap_exporter)">
         <param name="input_voxel_box_topic" value="$(arg octomap_export_input_voxel_box_topic)" />
-        <param name="octomap_export/frame_id" value="$(arg octomap_export_frame_id)" />
+        <param name="octomap_export/target_frame_id" value="$(arg octomap_export_target_frame_id)" />
         <param name="octomap_export/topic_name" value="$(arg octomap_export_topic_name)" />
         <param name="octomap_export/resolution" value="$(arg octomap_export_resolution)" />
         <param name="octomap_export/binary" value="$(arg octomap_export_binary)" />

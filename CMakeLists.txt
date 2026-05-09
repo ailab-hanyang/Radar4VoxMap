@@ -31,6 +31,7 @@ find_package(catkin REQUIRED COMPONENTS
     visualization_msgs
     jsk_recognition_msgs
     tf2
+    tf2_ros
     tf2_eigen
     octomap_msgs
 )
@@ -69,7 +70,7 @@ find_package(SuiteSparse REQUIRED) # g2o's SuiteSparse external dependency
 catkin_package(
   INCLUDE_DIRS include ros
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS roscpp sensor_msgs geometry_msgs nav_msgs visualization_msgs jsk_recognition_msgs tf2 tf2_eigen octomap_msgs
+  CATKIN_DEPENDS roscpp sensor_msgs geometry_msgs nav_msgs visualization_msgs jsk_recognition_msgs tf2 tf2_ros tf2_eigen octomap_msgs
 )
 
 include_directories(
@@ -133,6 +134,7 @@ target_link_libraries(${PROJECT_NAME}
 # Add radar_4_vox_map_ros executable
 add_executable(radar_4_vox_map_ros 
   ros/radar_4_vox_map_ros.cpp
+  src/octomap_voxel_builder.cpp
 )
 
 # Add dedicated OctoMap exporter executable (non-intrusive ROS layer)

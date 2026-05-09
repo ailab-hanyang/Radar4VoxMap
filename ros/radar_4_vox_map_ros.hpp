@@ -6,6 +6,8 @@
 #ifndef __RADAR_4_VOX_MAP_ROS_HPP__
 #define __RADAR_4_VOX_MAP_ROS_HPP__
 
+#include <vector>
+
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <geometry_msgs/PoseArray.h>
@@ -20,6 +22,7 @@
 
 #include <ini_handler_cpp/c_ini.hpp>
 #include "radar_4_vox_map.hpp"
+#include "octomap_voxel_builder.hpp"
 #include "radar_point_converters.hpp"
 
 class Radar4VoxMapROS {
@@ -113,7 +116,17 @@ private:
      * @return Bounding box array containing voxel boxes
      */
     jsk_recognition_msgs::BoundingBoxArray getVoxelMapBoxArray();
-    
+
+    jsk_recognition_msgs::BoundingBoxArray getOctomapVoxelMapBoxArray(
+        const Radar4VoxMapOctomapVoxelBuilder& octomap_builder,
+        const Radar4VoxMapOctomapVoxelBuilder::Input& octomap_input,
+        const Radar4VoxMapOctomapVoxelBuilder::GroundPlaneModel& ground_plane) const;
+
+    visualization_msgs::MarkerArray getOctomapGroundPlaneMarkerArray(
+        const Radar4VoxMapOctomapVoxelBuilder& octomap_builder,
+        const Radar4VoxMapOctomapVoxelBuilder::Input& octomap_input,
+        const Radar4VoxMapOctomapVoxelBuilder::GroundPlaneModel& ground_plane) const;
+
     /**
      * @brief Convert graph elements to marker array for visualization
      * @return Marker array containing graph visualization
@@ -139,6 +152,8 @@ private:
     ros::Publisher estimated_pose_array_pub_;
     ros::Publisher voxel_map_marker_array_pub_;
     ros::Publisher voxel_map_box_array_pub_;
+    ros::Publisher octomap_voxel_map_box_array_pub_;
+    ros::Publisher octomap_ground_plane_marker_array_pub_;
     ros::Publisher graph_marker_array_pub_;
     ros::Publisher graph_vertex_pose_array_pub_;
     ros::Publisher estimated_pose_pub_;
@@ -158,6 +173,20 @@ private:
     bool publish_graph_;
     bool publish_ground_truth_pose_;
     std::string ground_truth_pose_topic_;
+    std::string octomap_voxel_box_topic_;
+    bool octomap_ground_filter_enable_;
+    std::string octomap_ground_filter_method_;
+    double octomap_ground_covariance_sigma_scale_;
+    int octomap_ground_plane_ransac_iterations_;
+    double octomap_ground_plane_fit_distance_threshold_;
+    double octomap_ground_plane_remove_above_threshold_;
+    double octomap_ground_plane_max_tilt_deg_;
+    int octomap_ground_plane_min_inliers_;
+    double octomap_ground_plane_candidate_max_height_;
+    double octomap_ground_plane_marker_size_;
+    std::vector<double> octomap_radar_extrinsic_translation_;
+    std::vector<double> octomap_radar_extrinsic_rpy_deg_;
+    Eigen::Isometry3d octomap_radar_extrinsic_;
     // Field mapping related variables
     CRadarFieldMapping field_mapping_;
     
@@ -186,6 +215,8 @@ private:
     geometry_msgs::PoseArray est_pose_array_msg_;
     visualization_msgs::MarkerArray voxel_map_marker_array_;
     jsk_recognition_msgs::BoundingBoxArray voxel_map_box_array_;
+    jsk_recognition_msgs::BoundingBoxArray octomap_voxel_map_box_array_;
+    visualization_msgs::MarkerArray octomap_ground_plane_marker_array_;
     visualization_msgs::MarkerArray graph_marker_array_;
     geometry_msgs::PoseArray graph_node_pose_array_msg_;
     geometry_msgs::PoseStamped est_pose_msg_;
